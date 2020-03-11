@@ -46,20 +46,14 @@ extern "C" {
         MemfsNet = 0x00000001,
         MemfsDeviceMask = 0x0000000f,
         MemfsCaseInsensitive = 0x80000000,
-        MemfsFlushAndPurgeOnCleanup = 0x40000000,
     };
 
     NTSTATUS MemfsCreateFunnel(
         ULONG Flags,
         ULONG FileInfoTimeout,
         ULONG MaxFileNodes,
-        ULONG MaxFileSize,
-        ULONG SlowioMaxDelay,
-        ULONG SlowioPercentDelay,
-        ULONG SlowioRarefyDelay,
         PWSTR FileSystemName,
         PWSTR VolumePrefix,
-        PWSTR RootSddl,
         MEMFS_FILE_PROVIDER* FileProvider,
         MEMFS** PMemfs);
     VOID MemfsDelete(MEMFS* Memfs);
@@ -68,9 +62,8 @@ extern "C" {
     FSP_FILE_SYSTEM* MemfsFileSystem(MEMFS* Memfs);
 
     MEMFS_FILE_PROVIDER* CreateProvider(
-        std::function<PVOID(PCWSTR fileName)> Open,
+        std::function<PVOID(PCWSTR fileName, UINT64* fileSize)> Open,
         std::function<void(PVOID Handle)> Close,
-        std::function<UINT64(PCWSTR fileName)> GetSize,
         std::function<void(PVOID Handle, PVOID Buffer, UINT64 offset, ULONG length, ULONG* bytesRead)> Read);
     void CloseProvider(MEMFS_FILE_PROVIDER* Provider);
 

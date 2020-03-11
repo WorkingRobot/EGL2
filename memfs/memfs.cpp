@@ -33,22 +33,19 @@
 
 typedef struct _MEMFS_FILE_PROVIDER
 {
-    std::function<PVOID(PCWSTR fileName)> Open;
+    std::function<PVOID(PCWSTR fileName, UINT64* fileSize)> Open;
     std::function<void(PVOID Handle)> Close;
-    std::function<uint64_t(PCWSTR fileName)> GetSize;
     std::function<void(PVOID Handle, PVOID Buffer, UINT64 offset, ULONG length, ULONG * bytesRead)> Read;
 } MEMFS_FILE_PROVIDER;
 
 MEMFS_FILE_PROVIDER* CreateProvider(
-    std::function<PVOID(PCWSTR fileName)> Open,
+    std::function<PVOID(PCWSTR fileName, UINT64* fileSize)> Open,
     std::function<void(PVOID Handle)> Close,
-    std::function<uint64_t(PCWSTR fileName)> GetSize,
     std::function<void(PVOID Handle, PVOID Buffer, UINT64 offset, ULONG length, ULONG * bytesRead)> Read)
 {
     auto Provider = new MEMFS_FILE_PROVIDER;
     Provider->Open = Open;
     Provider->Close = Close;
-    Provider->GetSize = GetSize;
     Provider->Read = Read;
     return Provider;
 }
@@ -174,7 +171,6 @@ typedef struct _MEMFS
     MEMFS_FILE_NODE_MAP* FileNodeMap;
     MEMFS_FILE_PROVIDER* FileProvider;
     ULONG MaxFileNodes;
-    ULONG MaxFileSize;
     UINT16 VolumeLabelLength;
     WCHAR VolumeLabel[32];
 } MEMFS;
@@ -197,7 +193,7 @@ NTSTATUS MemfsFileNodeCreate(MEMFS_FILE_PROVIDER* Provider, PWSTR FileName, MEMF
         FileNode->FileInfo.LastAccessTime =
         FileNode->FileInfo.LastWriteTime =
         FileNode->FileInfo.ChangeTime = MemfsGetSystemTime();
-    FileNode->FileInfo.FileSize = Provider->GetSize(FileName);
+    FileNode->FileData = Provider->Open(FileName, &FileNode->FileInfo.FileSize);
     FileNode->FileInfo.IndexNumber = IndexNumber++;
 
     *PFileNode = FileNode;
@@ -507,7 +503,7 @@ NTSTATUS CreateFsFile(MEMFS* Memfs,
         return Result;
 
     FileNode->FileInfo.FileAttributes =
-        (Directory ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_ARCHIVE)
+        (Directory ? FILE_ATTRIBUTE_DIRECTORY : 0)
         | FILE_ATTRIBUTE_READONLY;
 
     FileNode->FileInfo.AllocationSize = 0;
@@ -538,9 +534,8 @@ static NTSTATUS GetVolumeInfo(FSP_FILE_SYSTEM* FileSystem,
 {
     MEMFS* Memfs = (MEMFS*)FileSystem->UserContext;
 
-    VolumeInfo->TotalSize = Memfs->MaxFileNodes * (UINT64)Memfs->MaxFileSize;
-    VolumeInfo->FreeSize = (Memfs->MaxFileNodes - MemfsFileNodeMapCount(Memfs->FileNodeMap)) *
-        (UINT64)Memfs->MaxFileSize;
+    VolumeInfo->TotalSize = Memfs->MaxFileNodes * (UINT64)4096;
+    VolumeInfo->FreeSize = (Memfs->MaxFileNodes - MemfsFileNodeMapCount(Memfs->FileNodeMap)) * 4096;
     VolumeInfo->VolumeLabelLength = Memfs->VolumeLabelLength;
     memcpy(VolumeInfo->VolumeLabel, Memfs->VolumeLabel, Memfs->VolumeLabelLength);
 
@@ -558,9 +553,9 @@ static NTSTATUS SetVolumeLabel(FSP_FILE_SYSTEM* FileSystem,
         Memfs->VolumeLabelLength = sizeof Memfs->VolumeLabel;
     memcpy(Memfs->VolumeLabel, VolumeLabel, Memfs->VolumeLabelLength);
 
-    VolumeInfo->TotalSize = Memfs->MaxFileNodes * Memfs->MaxFileSize;
+    VolumeInfo->TotalSize = Memfs->MaxFileNodes * 4096;
     VolumeInfo->FreeSize =
-        (Memfs->MaxFileNodes - MemfsFileNodeMapCount(Memfs->FileNodeMap)) * Memfs->MaxFileSize;
+        (Memfs->MaxFileNodes - MemfsFileNodeMapCount(Memfs->FileNodeMap)) * 4096;
     VolumeInfo->VolumeLabelLength = Memfs->VolumeLabelLength;
     memcpy(VolumeInfo->VolumeLabel, Memfs->VolumeLabel, Memfs->VolumeLabelLength);
 
@@ -994,52 +989,30 @@ NTSTATUS MemfsCreateFunnel(
     ULONG Flags,
     ULONG FileInfoTimeout,
     ULONG MaxFileNodes,
-    ULONG MaxFileSize,
-    ULONG SlowioMaxDelay,
-    ULONG SlowioPercentDelay,
-    ULONG SlowioRarefyDelay,
     PWSTR FileSystemName,
     PWSTR VolumePrefix,
-    PWSTR RootSddl,
     MEMFS_FILE_PROVIDER* FileProvider,
     MEMFS** PMemfs)
 {
     NTSTATUS Result;
     FSP_FSCTL_VOLUME_PARAMS VolumeParams;
     BOOLEAN CaseInsensitive = !!(Flags & MemfsCaseInsensitive);
-    BOOLEAN FlushAndPurgeOnCleanup = !!(Flags & MemfsFlushAndPurgeOnCleanup);
     PWSTR DevicePath = MemfsNet == (Flags & MemfsDeviceMask) ?
         L"" FSP_FSCTL_NET_DEVICE_NAME : L"" FSP_FSCTL_DISK_DEVICE_NAME;
-    UINT64 AllocationUnit;
     MEMFS* Memfs;
     MEMFS_FILE_NODE* RootNode;
-    PSECURITY_DESCRIPTOR RootSecurity;
-    ULONG RootSecuritySize;
     BOOLEAN Inserted;
 
     *PMemfs = 0;
 
-    //Result = MemfsHeapConfigure(0, 0, 0);
-    //if (!NT_SUCCESS(Result))
-    //    return Result;
-
-    if (0 == RootSddl)
-        RootSddl = L"O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;WD)";
-    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(RootSddl, SDDL_REVISION_1,
-        &RootSecurity, &RootSecuritySize))
-        return FspNtStatusFromWin32(GetLastError());
-
     Memfs = (MEMFS*)malloc(sizeof * Memfs);
     if (0 == Memfs)
     {
-        LocalFree(RootSecurity);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
     memset(Memfs, 0, sizeof * Memfs);
     Memfs->MaxFileNodes = MaxFileNodes;
-    AllocationUnit = MEMFS_SECTOR_SIZE * MEMFS_SECTORS_PER_ALLOCATION_UNIT;
-    Memfs->MaxFileSize = (ULONG)((MaxFileSize + AllocationUnit - 1) / AllocationUnit * AllocationUnit);
 
     Memfs->FileProvider = FileProvider;
 
@@ -1047,7 +1020,6 @@ NTSTATUS MemfsCreateFunnel(
     if (!NT_SUCCESS(Result))
     {
         free(Memfs);
-        LocalFree(RootSecurity);
         return Result;
     }
 
@@ -1065,7 +1037,7 @@ NTSTATUS MemfsCreateFunnel(
     VolumeParams.ReparsePoints = 1;
     VolumeParams.ReparsePointsAccessCheck = 0;
     VolumeParams.PostCleanupWhenModifiedOnly = 1;
-    VolumeParams.FlushAndPurgeOnCleanup = FlushAndPurgeOnCleanup;
+    VolumeParams.FlushAndPurgeOnCleanup = false;
     VolumeParams.AllowOpenInKernelMode = 1;
     if (0 != VolumePrefix)
         wcscpy_s(VolumeParams.Prefix, sizeof VolumeParams.Prefix / sizeof(WCHAR), VolumePrefix);
@@ -1077,7 +1049,6 @@ NTSTATUS MemfsCreateFunnel(
     {
         MemfsFileNodeMapDelete(Memfs->FileProvider, Memfs->FileNodeMap);
         free(Memfs);
-        LocalFree(RootSecurity);
         return Result;
     }
 
@@ -1092,34 +1063,20 @@ NTSTATUS MemfsCreateFunnel(
     Result = MemfsFileNodeCreate(Memfs->FileProvider, L"\\", &RootNode);
     if (!NT_SUCCESS(Result))
     {
+        wprintf(L"FAILED TO MAKE FILE %08x\n", Result);
         MemfsDelete(Memfs);
-        LocalFree(RootSecurity);
         return Result;
     }
 
     RootNode->FileInfo.FileAttributes = FILE_ATTRIBUTE_DIRECTORY;
-
-    RootNode->FileSecurity = malloc(RootSecuritySize);
-    if (0 == RootNode->FileSecurity)
-    {
-        MemfsFileNodeDelete(Memfs->FileProvider, RootNode);
-        MemfsDelete(Memfs);
-        LocalFree(RootSecurity);
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
-    RootNode->FileSecuritySize = RootSecuritySize;
-    memcpy(RootNode->FileSecurity, RootSecurity, RootSecuritySize);
 
     Result = MemfsFileNodeMapInsert(Memfs->FileNodeMap, RootNode, &Inserted);
     if (!NT_SUCCESS(Result))
     {
         MemfsFileNodeDelete(Memfs->FileProvider, RootNode);
         MemfsDelete(Memfs);
-        LocalFree(RootSecurity);
         return Result;
     }
-
-    LocalFree(RootSecurity);
 
     *PMemfs = Memfs;
 
