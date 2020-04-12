@@ -1,0 +1,47 @@
+#pragma once
+
+#include "cMain.h"
+#include "../containers/cancel_flag.h"
+
+#include <wx/wx.h>
+
+class cProgress : public wxFrame
+{
+	typedef std::chrono::steady_clock Clock;
+
+public:
+	cProgress(cMain* main, wxString taskName, cancel_flag& cancelFlag, float updateFreq = .05f, uint32_t maximum = 1);
+	~cProgress();
+
+	void SetFrequency(float updateFreq);
+	void SetMaximum(uint32_t maximum);
+	void Increment();
+	void Finish();
+
+protected:
+	wxPanel* panel = nullptr;
+
+	wxGauge* progressBar = nullptr;
+	wxSizer* progressTextSizer = nullptr;
+	wxStaticText* progressPercent = nullptr;
+	wxStaticText* progressTotal = nullptr;
+	wxStaticText* progressTimeElapsed = nullptr;
+	wxStaticText* progressTimeETA = nullptr;
+	wxButton* progressCancelBtn = nullptr;
+
+	wxAppProgressIndicator* progressTaskbar = nullptr;
+	wxWindowDisabler* progressDisabler = nullptr;
+
+private:
+	void Cancel(cancel_flag& cancelFlag);
+
+	void Update(bool force = false);
+
+	bool finished = false;
+	Clock::time_point startTime;
+	Clock::time_point lastUpdate;
+	float frequency;
+	std::atomic_uint32_t value;
+	uint32_t maxValue;
+};
+

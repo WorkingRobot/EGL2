@@ -1,25 +1,4 @@
-/**
- * @file memfs.cpp
- *
- * @copyright 2015-2020 Bill Zissimopoulos
- */
- /*
-  * This file is part of WinFsp.
-  *
-  * You can redistribute it and/or modify it under the terms of the GNU
-  * General Public License version 3 as published by the Free Software
-  * Foundation.
-  *
-  * Licensees holding a valid commercial license may use this software
-  * in accordance with the commercial license agreement provided in
-  * conjunction with the software.  The terms and conditions of any such
-  * commercial license agreement shall govern, supersede, and render
-  * ineffective any application of the GPLv3 license to this software,
-  * notwithstanding of any reference thereto in the software or
-  * associated repository.
-  */
 
-//#undef _DEBUG
 #include "memfs.h"
 #include <sddl.h>
 #include <VersionHelpers.h>
@@ -35,13 +14,13 @@ typedef struct _MEMFS_FILE_PROVIDER
 {
     std::function<PVOID(PCWSTR fileName, UINT64* fileSize)> Open;
     std::function<void(PVOID Handle)> Close;
-    std::function<void(PVOID Handle, PVOID Buffer, UINT64 offset, ULONG length, ULONG * bytesRead)> Read;
+    std::function<void(PVOID Handle, PVOID Buffer, UINT64 offset, ULONG length, ULONG* bytesRead)> Read;
 } MEMFS_FILE_PROVIDER;
 
 MEMFS_FILE_PROVIDER* CreateProvider(
     std::function<PVOID(PCWSTR fileName, UINT64* fileSize)> Open,
     std::function<void(PVOID Handle)> Close,
-    std::function<void(PVOID Handle, PVOID Buffer, UINT64 offset, ULONG length, ULONG * bytesRead)> Read)
+    std::function<void(PVOID Handle, PVOID Buffer, UINT64 offset, ULONG length, ULONG* bytesRead)> Read)
 {
     auto Provider = new MEMFS_FILE_PROVIDER;
     Provider->Open = Open;
@@ -54,10 +33,6 @@ void CloseProvider(MEMFS_FILE_PROVIDER* Provider)
 {
     delete Provider;
 }
-
-/*
- * MEMFS
- */
 
 static inline
 UINT64 MemfsGetSystemTime(VOID)
@@ -146,8 +121,6 @@ typedef struct _MEMFS_FILE_NODE
 {
     WCHAR FileName[MEMFS_MAX_PATH];
     FSP_FSCTL_FILE_INFO FileInfo;
-    SIZE_T FileSecuritySize;
-    PVOID FileSecurity;
     PVOID FileData;
     volatile LONG RefCount;
 } MEMFS_FILE_NODE;
@@ -171,8 +144,11 @@ typedef struct _MEMFS
     MEMFS_FILE_NODE_MAP* FileNodeMap;
     MEMFS_FILE_PROVIDER* FileProvider;
     ULONG MaxFileNodes;
-    UINT16 VolumeLabelLength;
+    UINT64 VolumeTotal;
+    UINT64 VolumeFree;
     WCHAR VolumeLabel[32];
+    PVOID Security;
+    SIZE_T SecuritySize;
 } MEMFS;
 
 static inline
@@ -205,7 +181,6 @@ static inline
 VOID MemfsFileNodeDelete(MEMFS_FILE_PROVIDER* Provider, MEMFS_FILE_NODE* FileNode)
 {
     Provider->Close(FileNode->FileData);
-    free(FileNode->FileSecurity);
     free(FileNode);
 }
 
@@ -534,10 +509,10 @@ static NTSTATUS GetVolumeInfo(FSP_FILE_SYSTEM* FileSystem,
 {
     MEMFS* Memfs = (MEMFS*)FileSystem->UserContext;
 
-    VolumeInfo->TotalSize = Memfs->MaxFileNodes * (UINT64)4096;
-    VolumeInfo->FreeSize = (Memfs->MaxFileNodes - MemfsFileNodeMapCount(Memfs->FileNodeMap)) * 4096;
-    VolumeInfo->VolumeLabelLength = Memfs->VolumeLabelLength;
-    memcpy(VolumeInfo->VolumeLabel, Memfs->VolumeLabel, Memfs->VolumeLabelLength);
+    VolumeInfo->TotalSize = Memfs->VolumeTotal;
+    VolumeInfo->FreeSize = Memfs->VolumeFree;
+    VolumeInfo->VolumeLabelLength = wcslen(Memfs->VolumeLabel) * sizeof(WCHAR);
+    wcscpy_s(VolumeInfo->VolumeLabel, Memfs->VolumeLabel);
 
     return STATUS_SUCCESS;
 }
@@ -546,20 +521,7 @@ static NTSTATUS SetVolumeLabel(FSP_FILE_SYSTEM* FileSystem,
     PWSTR VolumeLabel,
     FSP_FSCTL_VOLUME_INFO* VolumeInfo)
 {
-    MEMFS* Memfs = (MEMFS*)FileSystem->UserContext;
-
-    Memfs->VolumeLabelLength = (UINT16)(wcslen(VolumeLabel) * sizeof(WCHAR));
-    if (Memfs->VolumeLabelLength > sizeof Memfs->VolumeLabel)
-        Memfs->VolumeLabelLength = sizeof Memfs->VolumeLabel;
-    memcpy(Memfs->VolumeLabel, VolumeLabel, Memfs->VolumeLabelLength);
-
-    VolumeInfo->TotalSize = Memfs->MaxFileNodes * 4096;
-    VolumeInfo->FreeSize =
-        (Memfs->MaxFileNodes - MemfsFileNodeMapCount(Memfs->FileNodeMap)) * 4096;
-    VolumeInfo->VolumeLabelLength = Memfs->VolumeLabelLength;
-    memcpy(VolumeInfo->VolumeLabel, Memfs->VolumeLabel, Memfs->VolumeLabelLength);
-
-    return STATUS_SUCCESS;
+    return STATUS_ACCESS_DENIED;
 }
 
 static NTSTATUS GetSecurityByName(FSP_FILE_SYSTEM* FileSystem,
@@ -583,15 +545,16 @@ static NTSTATUS GetSecurityByName(FSP_FILE_SYSTEM* FileSystem,
 
     if (0 != PSecurityDescriptorSize)
     {
-        if (FileNode->FileSecuritySize > * PSecurityDescriptorSize)
+        if (Memfs->SecuritySize > *PSecurityDescriptorSize)
         {
-            *PSecurityDescriptorSize = FileNode->FileSecuritySize;
+            *PSecurityDescriptorSize = Memfs->SecuritySize;
             return STATUS_BUFFER_OVERFLOW;
         }
 
-        *PSecurityDescriptorSize = FileNode->FileSecuritySize;
+        *PSecurityDescriptorSize = Memfs->SecuritySize;
+
         if (0 != SecurityDescriptor)
-            memcpy(SecurityDescriptor, FileNode->FileSecurity, FileNode->FileSecuritySize);
+            memcpy(SecurityDescriptor, Memfs->Security, Memfs->SecuritySize);
     }
 
     return STATUS_SUCCESS;
@@ -729,8 +692,6 @@ NTSTATUS Flush(FSP_FILE_SYSTEM* FileSystem,
 {
     MEMFS_FILE_NODE* FileNode = (MEMFS_FILE_NODE*)FileNode0;
 
-    /*  nothing to flush, since we do not cache anything */
-
     if (0 != FileNode)
     {
         MemfsFileNodeGetFileInfo(FileNode, FileInfo);
@@ -813,17 +774,19 @@ static NTSTATUS GetSecurity(FSP_FILE_SYSTEM* FileSystem,
     PVOID FileNode0,
     PSECURITY_DESCRIPTOR SecurityDescriptor, SIZE_T* PSecurityDescriptorSize)
 {
+    MEMFS* Memfs = (MEMFS*)FileSystem->UserContext;
+
     MEMFS_FILE_NODE* FileNode = (MEMFS_FILE_NODE*)FileNode0;
 
-    if (FileNode->FileSecuritySize > * PSecurityDescriptorSize)
+    if (Memfs->SecuritySize > * PSecurityDescriptorSize)
     {
-        *PSecurityDescriptorSize = FileNode->FileSecuritySize;
+        *PSecurityDescriptorSize = Memfs->SecuritySize;
         return STATUS_BUFFER_OVERFLOW;
     }
 
-    *PSecurityDescriptorSize = FileNode->FileSecuritySize;
+    *PSecurityDescriptorSize = Memfs->SecuritySize;
     if (0 != SecurityDescriptor)
-        memcpy(SecurityDescriptor, FileNode->FileSecurity, FileNode->FileSecuritySize);
+        memcpy(SecurityDescriptor, Memfs->Security, Memfs->SecuritySize);
 
     return STATUS_SUCCESS;
 }
@@ -832,36 +795,7 @@ static NTSTATUS SetSecurity(FSP_FILE_SYSTEM* FileSystem,
     PVOID FileNode0,
     SECURITY_INFORMATION SecurityInformation, PSECURITY_DESCRIPTOR ModificationDescriptor)
 {
-    // to be fair, i have no idea when and how this runs, maybe add a logging statement to check back later?
-
-    MEMFS_FILE_NODE* FileNode = (MEMFS_FILE_NODE*)FileNode0;
-    PSECURITY_DESCRIPTOR NewSecurityDescriptor, FileSecurity;
-    SIZE_T FileSecuritySize;
-    NTSTATUS Result;
-
-    Result = FspSetSecurityDescriptor(
-        FileNode->FileSecurity,
-        SecurityInformation,
-        ModificationDescriptor,
-        &NewSecurityDescriptor);
-    if (!NT_SUCCESS(Result))
-        return Result;
-
-    FileSecuritySize = GetSecurityDescriptorLength(NewSecurityDescriptor);
-    FileSecurity = (PSECURITY_DESCRIPTOR)malloc(FileSecuritySize);
-    if (0 == FileSecurity)
-    {
-        FspDeleteSecurityDescriptor(NewSecurityDescriptor, (NTSTATUS(*)())FspSetSecurityDescriptor);
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
-    memcpy(FileSecurity, NewSecurityDescriptor, FileSecuritySize);
-    FspDeleteSecurityDescriptor(NewSecurityDescriptor, (NTSTATUS(*)())FspSetSecurityDescriptor);
-
-    free(FileNode->FileSecurity);
-    FileNode->FileSecuritySize = FileSecuritySize;
-    FileNode->FileSecurity = FileSecurity;
-
-    return STATUS_SUCCESS;
+    return STATUS_ACCESS_DENIED;
 }
 
 typedef struct _MEMFS_READ_DIRECTORY_CONTEXT
@@ -991,6 +925,11 @@ NTSTATUS MemfsCreateFunnel(
     ULONG MaxFileNodes,
     PWSTR FileSystemName,
     PWSTR VolumePrefix,
+    PWSTR VolumeLabel,
+    UINT64 VolumeTotal,
+    UINT64 VolumeFree,
+    PVOID Security,
+    SIZE_T SecuritySize,
     MEMFS_FILE_PROVIDER* FileProvider,
     MEMFS** PMemfs)
 {
@@ -1013,8 +952,10 @@ NTSTATUS MemfsCreateFunnel(
 
     memset(Memfs, 0, sizeof * Memfs);
     Memfs->MaxFileNodes = MaxFileNodes;
-
     Memfs->FileProvider = FileProvider;
+    Memfs->Security = malloc(SecuritySize);
+    memcpy(Memfs->Security, Security, SecuritySize);
+    Memfs->SecuritySize = SecuritySize;
 
     Result = MemfsFileNodeMapCreate(CaseInsensitive, &Memfs->FileNodeMap);
     if (!NT_SUCCESS(Result))
@@ -1040,9 +981,8 @@ NTSTATUS MemfsCreateFunnel(
     VolumeParams.FlushAndPurgeOnCleanup = false;
     VolumeParams.AllowOpenInKernelMode = 1;
     if (0 != VolumePrefix)
-        wcscpy_s(VolumeParams.Prefix, sizeof VolumeParams.Prefix / sizeof(WCHAR), VolumePrefix);
-    wcscpy_s(VolumeParams.FileSystemName, sizeof VolumeParams.FileSystemName / sizeof(WCHAR),
-        0 != FileSystemName ? FileSystemName : L"-MEMFS");
+        wcscpy_s(VolumeParams.Prefix, VolumePrefix);
+    wcscpy_s(VolumeParams.FileSystemName, FileSystemName);
 
     Result = FspFileSystemCreate(DevicePath, &VolumeParams, &MemfsInterface, &Memfs->FileSystem);
     if (!NT_SUCCESS(Result))
@@ -1053,8 +993,10 @@ NTSTATUS MemfsCreateFunnel(
     }
 
     Memfs->FileSystem->UserContext = Memfs;
-    Memfs->VolumeLabelLength = sizeof L"MEMFS" - sizeof(WCHAR);
-    memcpy(Memfs->VolumeLabel, L"MEMFS", Memfs->VolumeLabelLength);
+
+    wcscpy_s(Memfs->VolumeLabel, VolumeLabel);
+    Memfs->VolumeTotal = VolumeTotal;
+    Memfs->VolumeFree = VolumeFree;
 
     /*
      * Create root directory.
@@ -1063,7 +1005,6 @@ NTSTATUS MemfsCreateFunnel(
     Result = MemfsFileNodeCreate(Memfs->FileProvider, L"\\", &RootNode);
     if (!NT_SUCCESS(Result))
     {
-        wprintf(L"FAILED TO MAKE FILE %08x\n", Result);
         MemfsDelete(Memfs);
         return Result;
     }
