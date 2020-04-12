@@ -14,7 +14,7 @@
 ## Installation / Getting Started
 The process can be a little awkward, so here's a simple step by step guide:
  1. Install [WinFsp](http://www.secfs.net/winfsp/), which can be downloaded [here](https://github.com/billziss-gh/winfsp/releases/download/v1.7B1/winfsp-1.7.20038.msi). (Only the "Core" feature is necessary)
- 2. Download the latest install of EGL2 [here](https://github.com/WorkingRobot/EGL2/releases/latest/download/EGL2.exe).
+ 2. Download the latest install of EGL2 [here](https://github.com/WorkingRobot/EGL2/releases/latest/download/EGL2.exe). If you get an error about a VCRUNTIME dll missing, install the [Visual C++ redistributable](https://aka.ms/vs/16/release/vc_redist.x64.exe).
  3. When ran, you should be greeted with a window with a several buttons. If instead you see an error, follow the instructions it shows.
  4. Click "Setup", where a new window will prompt you to setup where you want your data to be stored.
  5. If you want to be able to play the game (and not just download it), you will need to select a game directory as well. If you do not want to play, deselect the checkbox in the bottom right corner.

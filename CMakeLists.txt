@@ -49,4 +49,4 @@ find_package(lz4 REQUIRED)
 
 target_link_options(EGL2 PRIVATE "/DELAYLOAD:winfsp-x64.dll")
 target_include_directories(EGL2 PRIVATE "$ENV{ProgramFiles\(x86\)}\\WinFsp\\inc" ${RAPIDJSON_INCLUDE_DIRS} "libdeflate")
-target_link_libraries(EGL2 PRIVATE "$ENV{ProgramFiles\(x86\)}\\WinFsp\\lib\\winfsp-x64.lib" OpenSSL::SSL OpenSSL::Crypto Crypt32 ZLIB::ZLIB lz4::lz4 delayimp "${CMAKE_CURRENT_SOURCE_DIR}\\libdeflate\\libdeflatestatic.lib")
+target_link_libraries(EGL2 PRIVATE "$ENV{ProgramFiles\(x86\)}\\WinFsp\\lib\\winfsp-x64.lib" OpenSSL::SSL OpenSSL::Crypto Crypt32 ZLIB::ZLIB lz4::lz4 Psapi delayimp "${CMAKE_CURRENT_SOURCE_DIR}\\libdeflate\\libdeflatestatic.lib")

@@ -19,11 +19,8 @@ bool cApp::OnInit() {
 	if (result != WinFspCheckResult::LOADED) {
 		switch (result)
 		{
-		case WinFspCheckResult::CANNOT_ENUMERATE:
-			MESSAGE_ERROR("Could not iterate over drivers to get WinFsp install. System-specific error: %d", GetLastError());
-			break;
-		case WinFspCheckResult::NOT_FOUND:
-			MESSAGE_ERROR("Could not find WinFsp as an installed driver. Maybe you don't have it installed?");
+		case WinFspCheckResult::NO_PATH:
+			MESSAGE_ERROR("Could not get your Program Files (x86) folder. I honestly have no idea how you'd get this error.");
 			break;
 		case WinFspCheckResult::NO_DLL:
 			MESSAGE_ERROR("Could not find WinFsp's DLL in the driver's folder. Try reinstalling WinFsp.");
