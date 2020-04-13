@@ -2,7 +2,6 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <Psapi.h>
 
 #include <filesystem>
 #include <ShlObj_core.h>

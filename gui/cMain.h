@@ -41,6 +41,7 @@ protected:
 
 private:
 	std::unique_ptr<MountedBuild>& GetMountedBuild();
+	void Unmount();
 
 	fs::path SettingsPath;
 	SETTINGS Settings;

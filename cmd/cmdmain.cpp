@@ -1,5 +1,7 @@
 #include "../MountedBuild.h"
-#include "../winfspcheck.h"
+#include "../checks/winfspcheck.h"
+
+#include <UserEnv.h>
 
 static inline const char* humanSize(uint64_t bytes)
 {
@@ -36,11 +38,8 @@ int wmain(ULONG argc, PWSTR* argv)
         if (result != WinFspCheckResult::LOADED) {
             switch (result)
             {
-            case WinFspCheckResult::CANNOT_ENUMERATE:
-                printf("Could not iterate over drivers to get WinFsp install. System-specific error: %d\n", GetLastError());
-                break;
-            case WinFspCheckResult::NOT_FOUND:
-                printf("Could not find WinFsp as an installed driver. Maybe you don't have it installed?\n");
+            case WinFspCheckResult::NO_PATH:
+                printf("Could not get your Program Files (x86) folder. I honestly have no idea how you'd get this error.\n");
                 break;
             case WinFspCheckResult::NO_DLL:
                 printf("Could not find WinFsp's DLL in the driver's folder. Try reinstalling WinFsp.\n");

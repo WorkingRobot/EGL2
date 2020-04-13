@@ -13,6 +13,7 @@ namespace fs = std::filesystem;
 typedef std::function<void(uint32_t max)> ProgressSetMaxHandler;
 typedef std::function<void()> ProgressIncrHandler;
 typedef std::function<void(const char* error)> ErrorHandler;
+typedef std::function<bool()> EnforceSymlinkCreationHandler;
 
 class MountedBuild {
 public:
@@ -20,7 +21,7 @@ public:
 	~MountedBuild();
 
 	bool SetupCacheDirectory();
-	bool SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount, fs::path gameDir);
+	bool SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount, fs::path gameDir, EnforceSymlinkCreationHandler enforceSymlinkCreation);
 	bool StartStorage(uint32_t storageFlags);
 	bool PreloadAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount);
 	void PurgeUnusedChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag);

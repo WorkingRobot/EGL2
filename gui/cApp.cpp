@@ -1,10 +1,10 @@
 #include "cApp.h"
 
-#include "../winfspcheck.h"
+#include "../checks/winfspcheck.h"
 
 #include <ShlObj_core.h>
 
-#define MESSAGE_ERROR(format, ...) wxMessageBox(wxString::Format(format, __VA_ARGS__), "Error", wxICON_ERROR | wxOK | wxCENTRE)
+#define MESSAGE_ERROR(format, ...) wxMessageBox(wxString::Format(format, __VA_ARGS__), "Error - EGL2", wxICON_ERROR | wxOK | wxCENTRE)
 
 cApp::cApp() {
 

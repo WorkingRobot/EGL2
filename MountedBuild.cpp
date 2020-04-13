@@ -106,12 +106,13 @@ bool inline CompareFile(MANIFEST_FILE* File, fs::path FilePath) {
     return !memcmp(FileSha, ManifestFileGetSha1(File), 20);
 }
 
-bool MountedBuild::SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount, fs::path gameDir) {
+bool MountedBuild::SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount, fs::path gameDir, EnforceSymlinkCreationHandler enforceSymlinkCreation) {
     if (!fs::is_directory(gameDir) && !fs::create_directories(gameDir)) {
         LogError("can't create gamedir %s\n", gameDir.string().c_str());
         return false;
     }
 
+    bool symlinkCreationEnforced = false;
     MANIFEST_FILE* Files;
     uint32_t FileCount;
     uint16_t FileStride;
@@ -142,6 +143,12 @@ bool MountedBuild::SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncr
         } while (folderPath != folderPath.root_path());
 
         if (!fs::is_symlink(gameDir / filePath)) {
+            if (!symlinkCreationEnforced) {
+                if (!enforceSymlinkCreation()) {
+                    return false;
+                }
+                symlinkCreationEnforced = true;
+            }
             fs::create_symlink(MountDir / filePath, gameDir / filePath);
         }
     continueFileLoop:

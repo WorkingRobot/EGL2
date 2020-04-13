@@ -3,6 +3,8 @@
 #include "cProgress.h"
 #include "cAuth.h"
 
+#include "../checks/symlink_workaround.h"
+
 #include <wx/gbsizer.h>
 #include <wx/windowptr.h>
 #include <thread>
@@ -193,22 +195,31 @@ void cMain::OnPreloadClicked() {
 void cMain::OnStartClicked() {
 	auto& build = GetMountedBuild();
 	if (build->Mounted()) {
-		build->Unmount();
-		setupBtn->Enable();
-		startFnBtn->Disable();
-		startBtn->SetLabel("Start");
-		SetStatus(STATUS_NORMAL);
+		Unmount();
 	}
 	else {
 		if (build->Mount()) {
-			if (Settings.EnableGaming) {
-				RUN_PROGRESS("Setting Up", SetupGameDirectory, 64, Settings.GameDir);
-			}
-
 			setupBtn->Disable();
 			startFnBtn->Enable(Settings.EnableGaming);
 			startBtn->SetLabel("Stop");
 			SetStatus(Settings.EnableGaming ? STATUS_PLAYABLE : STATUS_UNPLAYABLE);
+
+			if (Settings.EnableGaming) {
+				RUN_PROGRESS("Setting Up", SetupGameDirectory, 64, Settings.GameDir, [=]() {
+					if (!IsDeveloperModeEnabled()) {
+						if (!IsUserAdmin()) {
+							wxMessageBox("In order to finish setting up Fortnite, please restart EGL2 in administator mode!", "Symlink Creation Error - EGL2", wxICON_ERROR | wxOK | wxCENTRE);
+							Unmount();
+							return false;
+						}
+						else {
+							EnableDeveloperMode();
+							return true;
+						}
+					}
+					return true;
+				});
+			}
 		}
 	}
 }
@@ -231,7 +242,6 @@ void cMain::OnClose(wxCloseEvent& evt)
 			return;
 		}
 	}
-
 	Destroy();
 }
 
@@ -245,4 +255,13 @@ std::unique_ptr<MountedBuild>& cMain::GetMountedBuild() {
 		Build->StartStorage(SettingsGetStorageFlags(&Settings));
 	}
 	return Build;
+}
+
+void cMain::Unmount() {
+	auto& build = GetMountedBuild();
+	build->Unmount();
+	setupBtn->Enable();
+	startFnBtn->Disable();
+	startBtn->SetLabel("Start");
+	SetStatus(STATUS_NORMAL);
 }
