@@ -121,11 +121,19 @@ cSetup::cSetup(cMain* main, SETTINGS* settings) : wxModalWindow(main, wxID_ANY, 
 	if (Settings->MountDrive == '\0') {
 		mountDirValue->SetSelection(0);
 	}
+
 	// disable when first 2 options are selected
 	compLevelValue->Enable(compMethodValue->GetSelection() >= 2);
 	compMethodValue->Bind(wxEVT_CHOICE, [this](wxCommandEvent& evt) {
 		compLevelValue->Enable(compMethodValue->GetSelection() >= 2);
 	});
+
+	// disable when deselected
+	gameDirValue->Enable(gameDirCheckbox->IsChecked());
+	gameDirCheckbox->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent& evt) {
+		gameDirValue->Enable(gameDirCheckbox->IsChecked());
+	});
+
 	Bind(wxEVT_CLOSE_WINDOW, std::bind(&cSetup::WriteConfig, this));
 }
 
