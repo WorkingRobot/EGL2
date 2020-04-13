@@ -1,4 +1,6 @@
 # EGL2
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2FWorkingRobot%2FEGL2.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2FWorkingRobot%2FEGL2?ref=badge_shield)
+
 ## An alternative to the Epic Games Launcher
 
 ## Features
@@ -46,3 +48,7 @@ I use [CMake for Visual Studio](https://docs.microsoft.com/en-us/cpp/build/cmake
 ### CMake Build Options
  - `WITH_GUI` - if set to false, a command line version will be built instead. (Going to be honest, I haven't checked for any crashes/errors in the console version, but it should work)
  - `WX_DIR` - if you want to build EGL2 with a GUI, set this path to your wxWidgets directory.
+
+
+## License
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2FWorkingRobot%2FEGL2.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2FWorkingRobot%2FEGL2?ref=badge_large)
