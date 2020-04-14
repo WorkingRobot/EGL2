@@ -29,8 +29,6 @@ static const char* compLevels[] = {
 						"Note: Depending on the install, an additional 300-400MB\n" \
 						"of data will need to be allocated on your hard drive."
 
-#define DRIVE_ALPHABET  "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
 cSetup::cSetup(cMain* main, SETTINGS* settings) : wxModalWindow(main, wxID_ANY, "Setup - EGL2", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)) {
 	Settings = settings;
 
@@ -43,74 +41,62 @@ cSetup::cSetup(cMain* main, SETTINGS* settings) : wxModalWindow(main, wxID_ANY, 
 		wxDefaultSize,
 		wxTAB_TRAVERSAL);
 
-	settingsContainer = new wxWindow(panel, wxID_ANY);
-	checkboxContainer = new wxWindow(panel, wxID_ANY);
-
 	auto settingsGrid = new wxGridBagSizer(2, 2);
 
-	cacheDirTxt = new wxStaticText(settingsContainer, wxID_ANY, "Cache Folder");
-	cacheDirValue = new wxDirPickerCtrl(settingsContainer, wxID_ANY);
+	cacheDirTxt = new wxStaticText(panel, wxID_ANY, "Install Folder");
+	cacheDirValue = new wxDirPickerCtrl(panel, wxID_ANY);
 
-	wxArrayString drives;
-	auto usedDrives = GetLogicalDrives();
-	for (int b = 0; b < strlen(DRIVE_ALPHABET); ++b) {
-		if (!((usedDrives >> b) & 1)) {
-			drives.push_back(wxString(DRIVE_ALPHABET[b]) + ':');
-		}
-	}
-
-	mountDirTxt = new wxStaticText(settingsContainer, wxID_ANY, "Mount Drive");
-	mountDirValue = new wxChoice(settingsContainer, wxID_ANY, wxDefaultPosition, wxDefaultSize, drives);
-
-	gameDirTxt = new wxStaticText(settingsContainer, wxID_ANY, "Game Folder");
-	gameDirValue = new wxDirPickerCtrl(settingsContainer, wxID_ANY);
-
-	compMethodTxt = new wxStaticText(settingsContainer, wxID_ANY, "Compression Method");
-	compMethodValue = new wxChoice(settingsContainer, wxID_ANY);
+	compMethodTxt = new wxStaticText(panel, wxID_ANY, "Compression Method");
+	compMethodValue = new wxChoice(panel, wxID_ANY);
 	compMethodValue->Append(wxArrayString(_countof(compMethods), compMethods));
 
-	compLevelTxt = new wxStaticText(settingsContainer, wxID_ANY, "Compression Level");
-	compLevelValue = new wxChoice(settingsContainer, wxID_ANY);
+	compLevelTxt = new wxStaticText(panel, wxID_ANY, "Compression Level");
+	compLevelValue = new wxChoice(panel, wxID_ANY);
 	compLevelValue->Append(wxArrayString(_countof(compLevels), compLevels));
 
-
-	verifyCacheCheckbox = new wxCheckBox(checkboxContainer, wxID_ANY, "Verify cache when read from");
+	verifyCacheCheckbox = new wxCheckBox(panel, wxID_ANY, "Verify chunks when read from");
 	verifyCacheCheckbox->SetToolTip(VERIFY_TOOLTIP);
 
-	gameDirCheckbox = new wxCheckBox(checkboxContainer, wxID_ANY, "Enable playing of game");
+	gameDirCheckbox = new wxCheckBox(panel, wxID_ANY, "Enable playing of game");
 	gameDirCheckbox->SetToolTip(GAME_TOOLTIP);
 
 	settingsGrid->Add(cacheDirTxt, wxGBPosition(0, 0), wxGBSpan(1, 1), wxEXPAND);
 	settingsGrid->Add(cacheDirValue, wxGBPosition(0, 2), wxGBSpan(1, 1), wxEXPAND);
 
-	settingsGrid->Add(mountDirTxt, wxGBPosition(1, 0), wxGBSpan(1, 1), wxEXPAND);
-	settingsGrid->Add(mountDirValue, wxGBPosition(1, 2), wxGBSpan(1, 1), wxEXPAND);
-
-	settingsGrid->Add(gameDirTxt, wxGBPosition(2, 0), wxGBSpan(1, 1), wxEXPAND);
-	settingsGrid->Add(gameDirValue, wxGBPosition(2, 2), wxGBSpan(1, 1), wxEXPAND);
-
-	settingsGrid->Add(compMethodTxt, wxGBPosition(3, 0), wxGBSpan(1, 1), wxEXPAND);
-	settingsGrid->Add(compLevelTxt, wxGBPosition(4, 0), wxGBSpan(1, 1), wxEXPAND);
-	settingsGrid->Add(compMethodValue, wxGBPosition(3, 2), wxGBSpan(1, 1), wxEXPAND);
-	settingsGrid->Add(compLevelValue, wxGBPosition(4, 2), wxGBSpan(1, 1), wxEXPAND);
+	settingsGrid->Add(compMethodTxt, wxGBPosition(1, 0), wxGBSpan(1, 1), wxEXPAND);
+	settingsGrid->Add(compLevelTxt, wxGBPosition(2, 0), wxGBSpan(1, 1), wxEXPAND);
+	settingsGrid->Add(compMethodValue, wxGBPosition(1, 2), wxGBSpan(1, 1), wxEXPAND);
+	settingsGrid->Add(compLevelValue, wxGBPosition(2, 2), wxGBSpan(1, 1), wxEXPAND);
 
 	settingsGrid->AddGrowableCol(2);
 	settingsGrid->Add(5, 1, wxGBPosition(0, 1));
-
-	settingsContainer->SetSizerAndFit(settingsGrid);
 
 	auto checkboxSizer = new wxBoxSizer(wxHORIZONTAL);
 
 	checkboxSizer->Add(verifyCacheCheckbox, 1);
 	checkboxSizer->Add(gameDirCheckbox, 1);
 
-	checkboxContainer->SetSizerAndFit(checkboxSizer);
+	auto advancedBox = new wxStaticBoxSizer(wxVERTICAL, panel, "Advanced");
+	auto advancedSizer = new wxGridBagSizer(2, 2);
+
+	cmdArgsTxt = new wxStaticText(panel, wxID_ANY, "Command Arguments");
+	cmdArgsValue = new wxTextCtrl(panel, wxID_ANY);
+
+	advancedSizer->Add(cmdArgsTxt, wxGBPosition(0, 0), wxGBSpan(1, 1), wxEXPAND);
+	advancedSizer->Add(cmdArgsValue, wxGBPosition(0, 2), wxGBSpan(1, 1), wxEXPAND);
+
+	advancedSizer->AddGrowableCol(2);
+	advancedSizer->Add(5, 1, wxGBPosition(0, 1));
+
+	advancedBox->Add(advancedSizer, wxSizerFlags().Expand().Border(wxALL, 5));
 
 	auto sizer = new wxBoxSizer(wxVERTICAL);
 
-	sizer->Add(settingsContainer, wxSizerFlags().Expand().Border(wxUP | wxRIGHT | wxLEFT, 10));
+	sizer->Add(settingsGrid, wxSizerFlags().Expand().Border(wxUP | wxRIGHT | wxLEFT, 10));
 	sizer->AddSpacer(10);
-	sizer->Add(checkboxContainer, wxSizerFlags().Expand().Border(wxDOWN | wxRIGHT | wxLEFT, 10));
+	sizer->Add(checkboxSizer, wxSizerFlags().Expand().Border(wxRIGHT | wxLEFT, 10));
+	sizer->AddSpacer(10);
+	sizer->Add(advancedBox, wxSizerFlags().Expand().Border(wxDOWN | wxRIGHT | wxLEFT, 10));
 
 	panel->SetSizerAndFit(sizer);
 	this->Fit();
@@ -118,20 +104,11 @@ cSetup::cSetup(cMain* main, SETTINGS* settings) : wxModalWindow(main, wxID_ANY, 
 	wxToolTip::SetAutoPop(15000);
 
 	ReadConfig();
-	if (Settings->MountDrive == '\0') {
-		mountDirValue->SetSelection(0);
-	}
 
 	// disable when first 2 options are selected
 	compLevelValue->Enable(compMethodValue->GetSelection() >= 2);
 	compMethodValue->Bind(wxEVT_CHOICE, [this](wxCommandEvent& evt) {
 		compLevelValue->Enable(compMethodValue->GetSelection() >= 2);
-	});
-
-	// disable when deselected
-	gameDirValue->Enable(gameDirCheckbox->IsChecked());
-	gameDirCheckbox->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent& evt) {
-		gameDirValue->Enable(gameDirCheckbox->IsChecked());
 	});
 
 	Bind(wxEVT_CLOSE_WINDOW, std::bind(&cSetup::WriteConfig, this));
@@ -143,8 +120,7 @@ cSetup::~cSetup() {
 
 void cSetup::ReadConfig() {
 	cacheDirValue->SetPath(Settings->CacheDir);
-	mountDirValue->SetStringSelection(wxString(Settings->MountDrive) + ':');
-	gameDirValue->SetPath(Settings->GameDir);
+	cmdArgsValue->SetValue(Settings->CommandArgs);
 
 	compMethodValue->SetSelection(Settings->CompressionMethod);
 	compLevelValue->SetSelection(Settings->CompressionLevel);
@@ -155,8 +131,7 @@ void cSetup::ReadConfig() {
 
 void cSetup::WriteConfig() {
 	strcpy_s(Settings->CacheDir, cacheDirValue->GetPath().c_str());
-	Settings->MountDrive = mountDirValue->GetStringSelection()[0];
-	strcpy_s(Settings->GameDir, gameDirValue->GetPath().c_str());
+	strcpy_s(Settings->CommandArgs, cmdArgsValue->GetValue().c_str());
 
 	Settings->CompressionMethod = compMethodValue->GetSelection();
 	Settings->CompressionLevel = compLevelValue->GetSelection();

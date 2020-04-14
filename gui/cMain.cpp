@@ -24,7 +24,7 @@
 #define STATUS_PLAYABLE   "Started! Press \"Play\" to start playing!"
 #define STATUS_UNPLAYABLE "Started! If you want to play, enable it in your setup!"
 
-#define LAUNCH_GAME_ARGS  "-AUTH_LOGIN=unused AUTH_TYPE=exchangecode -epicapp=Fortnite -epicenv=Prod -epicportal -epiclocale=en-us -AUTH_PASSWORD=%s"
+#define LAUNCH_GAME_ARGS  "-AUTH_LOGIN=unused AUTH_TYPE=exchangecode -epicapp=Fortnite -epicenv=Prod -epicportal -epiclocale=en-us -AUTH_PASSWORD=%s %s"
 
 #define BIND_BUTTON_DESC(btn, desc) \
 	btn->Bind(wxEVT_MOTION, std::bind(&cMain::OnButtonHover, this, desc)); \
@@ -109,7 +109,6 @@ cMain::cMain(fs::path settingsPath, fs::path manifestPath) : wxFrame(nullptr, wx
 		fclose(settingsFp);
 	}
 	else {
-		Settings.MountDrive = '\0';
 		Settings.CompressionLevel = 4; // Slowest
 		Settings.CompressionMethod = 1; // Decompress
 		Settings.EnableGaming = true;
@@ -205,7 +204,7 @@ void cMain::OnStartClicked() {
 			SetStatus(Settings.EnableGaming ? STATUS_PLAYABLE : STATUS_UNPLAYABLE);
 
 			if (Settings.EnableGaming) {
-				RUN_PROGRESS("Setting Up", SetupGameDirectory, 64, Settings.GameDir, [=]() {
+				RUN_PROGRESS("Setting Up", SetupGameDirectory, 64, [=]() {
 					if (!IsDeveloperModeEnabled()) {
 						if (!IsUserAdmin()) {
 							wxMessageBox("In order to finish setting up Fortnite, please restart EGL2 in administator mode!", "Symlink Creation Error - EGL2", wxICON_ERROR | wxOK | wxCENTRE);
@@ -229,7 +228,7 @@ void cMain::OnPlayClicked() {
 	auth.ShowModal();
 	if (!auth.GetCode().IsEmpty()) {
 		auto& build = GetMountedBuild();
-		build->LaunchGame(Settings.GameDir, wxString::Format(LAUNCH_GAME_ARGS, auth.GetCode()).c_str());
+		build->LaunchGame(wxString::Format(LAUNCH_GAME_ARGS, auth.GetCode(), Settings.CommandArgs).c_str());
 	}
 }
 
@@ -249,9 +248,20 @@ void cMain::SetStatus(const char* string) {
 	statusBar->SetLabel(string);
 }
 
+#define DRIVE_ALPHABET  "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+inline fs::path GetMountDrive() {
+	auto usedDrives = GetLogicalDrives();
+	for (int b = 0; b < strlen(DRIVE_ALPHABET); ++b) {
+		if (!((usedDrives >> b) & 1)) {
+			return std::string(1, DRIVE_ALPHABET[b]) + ':';
+		}
+	}
+	return "/"; // unsure what to do here honestly
+}
+
 std::unique_ptr<MountedBuild>& cMain::GetMountedBuild() {
 	if (!Build) {
-		Build = std::make_unique<MountedBuild>(Manifest, std::string(1, Settings.MountDrive) + ':', Settings.CacheDir, [](const char* error) {});
+		Build = std::make_unique<MountedBuild>(Manifest, GetMountDrive(), Settings.CacheDir, [](const char* error) {});
 		Build->StartStorage(SettingsGetStorageFlags(&Settings));
 	}
 	return Build;

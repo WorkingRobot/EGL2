@@ -9,15 +9,52 @@ inline T ReadValue(FILE* File) {
 	return *(T*)val;
 }
 
-// ptrLength does not include the \0 at the end (ptrLength of 0 still includes \0)
-inline bool ReadString(char* ptr, uint16_t ptrLength, FILE* File) {
+// pointer should have 1 more byte of space for the \0
+template<uint16_t ptrSize>
+inline bool ReadString(char(&ptr)[ptrSize], FILE* File) {
 	auto stringSize = ntohs(ReadValue<uint16_t>(File));
-	if (stringSize > ptrLength) {
+
+	if (stringSize > ptrSize - 1) {
 		return false;
 	}
 	fread(ptr, 1, stringSize, File);
 	ptr[stringSize] = '\0';
 	return true;
+}
+
+inline bool ReadVersion(SETTINGS* Settings, FILE* File, SettingsVersion Version) {
+	switch (Version)
+	{
+	case SettingsVersion::Initial:
+		ReadString(Settings->CacheDir, File);
+
+		char EmptyBuf[_MAX_PATH + 1];
+		ReadString(EmptyBuf, File); // was GameDir
+
+		ReadValue<char>(File); // was MountDrive
+
+		Settings->CompressionMethod = ReadValue<int8_t>(File);
+		Settings->CompressionLevel = ReadValue<int8_t>(File);
+
+		Settings->VerifyCache = ReadValue<bool>(File);
+		Settings->EnableGaming = ReadValue<bool>(File);
+
+		strcpy(Settings->CommandArgs, "");
+		return true;
+	case SettingsVersion::SimplifyPathsAndCmdLine:
+		ReadString(Settings->CacheDir, File);
+
+		Settings->CompressionMethod = ReadValue<int8_t>(File);
+		Settings->CompressionLevel = ReadValue<int8_t>(File);
+
+		Settings->VerifyCache = ReadValue<bool>(File);
+		Settings->EnableGaming = ReadValue<bool>(File);
+
+		ReadString(Settings->CommandArgs, File);
+		return true;
+	default:
+		return false;
+	}
 }
 
 bool SettingsRead(SETTINGS* Settings, FILE* File) {
@@ -26,22 +63,8 @@ bool SettingsRead(SETTINGS* Settings, FILE* File) {
 	if (ntohl(ReadValue<uint32_t>(File)) != FILE_CONFIG_MAGIC) {
 		return false;
 	}
-	if (ntohs(ReadValue<uint16_t>(File)) != FILE_CONFIG_VERSION) {
-		return false;
-	}
 
-	ReadString(Settings->CacheDir, _MAX_PATH, File);
-	ReadString(Settings->GameDir, _MAX_PATH, File);
-
-	Settings->MountDrive = ReadValue<char>(File);
-
-	Settings->CompressionMethod = ReadValue<int8_t>(File);
-	Settings->CompressionLevel = ReadValue<int8_t>(File);
-
-	Settings->VerifyCache = ReadValue<bool>(File);
-	Settings->EnableGaming = ReadValue<bool>(File);
-
-	return true;
+	return ReadVersion(Settings, File, (SettingsVersion)ntohs(ReadValue<uint16_t>(File)));
 }
 
 template <typename T>
@@ -49,9 +72,10 @@ inline void WriteValue(T val, FILE* File) {
 	fwrite(&val, sizeof(T), 1, File);
 }
 
-inline void WriteString(char* ptr, int ptrLength, FILE* File) {
-	WriteValue<uint16_t>(htons(ptrLength), File);
-	fwrite(ptr, 1, ptrLength, File);
+inline void WriteString(char* ptr, FILE* File) {
+	uint16_t ptrSize = strlen(ptr);
+	WriteValue<uint16_t>(htons(ptrSize), File);
+	fwrite(ptr, 1, ptrSize, File);
 }
 
 void SettingsWrite(SETTINGS* Settings, FILE* File)
@@ -61,23 +85,19 @@ void SettingsWrite(SETTINGS* Settings, FILE* File)
 	WriteValue<uint32_t>(htonl(FILE_CONFIG_MAGIC), File);
 	WriteValue<uint16_t>(htons(FILE_CONFIG_VERSION), File);
 
-	WriteString(Settings->CacheDir, strlen(Settings->CacheDir), File);
-	WriteString(Settings->GameDir, strlen(Settings->GameDir), File);
-
-	WriteValue<char>(Settings->MountDrive, File);
+	WriteString(Settings->CacheDir, File);
 
 	WriteValue<int8_t>(Settings->CompressionMethod, File);
 	WriteValue<int8_t>(Settings->CompressionLevel, File);
 
 	WriteValue<bool>(Settings->VerifyCache, File);
 	WriteValue<bool>(Settings->EnableGaming, File);
+
+	WriteString(Settings->CommandArgs, File);
 }
 
 bool SettingsValidate(SETTINGS* Settings) {
 	if (!fs::is_directory(Settings->CacheDir)) {
-		return false;
-	}
-	if (Settings->EnableGaming && !fs::is_directory(Settings->GameDir)) {
 		return false;
 	}
 	return true;

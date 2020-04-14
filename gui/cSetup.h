@@ -17,16 +17,10 @@ protected:
 
 	wxWindow* settingsContainer = nullptr;
 	wxWindow* checkboxContainer = nullptr;
+	wxStaticBoxSizer* advancedContainer = nullptr;
 
 	wxStaticText* cacheDirTxt = nullptr;
 	wxDirPickerCtrl* cacheDirValue = nullptr;
-
-	wxStaticText* mountDirTxt = nullptr;
-	wxChoice* mountDirValue = nullptr;
-	// TODO: add folder support with a radio button/combo box
-
-	wxStaticText* gameDirTxt = nullptr;
-	wxDirPickerCtrl* gameDirValue = nullptr;
 
 	wxStaticText* compMethodTxt = nullptr;
 	wxChoice* compMethodValue = nullptr;
@@ -36,6 +30,9 @@ protected:
 
 	wxCheckBox* verifyCacheCheckbox = nullptr;
 	wxCheckBox* gameDirCheckbox = nullptr;
+
+	wxStaticText* cmdArgsTxt = nullptr;
+	wxTextCtrl* cmdArgsValue = nullptr;
 
 private:
 	SETTINGS* Settings;
