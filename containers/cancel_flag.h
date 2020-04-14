@@ -29,5 +29,5 @@ public:
 	}
 
 protected:
-	std::atomic<bool> value = false;
+	std::atomic_bool value = false;
 };

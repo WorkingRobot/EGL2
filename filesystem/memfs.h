@@ -1,18 +1,17 @@
 #pragma once
 
-#include <functional>
-
-#include <winfsp/winfsp.h>
-
 #define MEMFS_MAX_PATH                  512
-FSP_FSCTL_STATIC_ASSERT(MEMFS_MAX_PATH > MAX_PATH,
-    "MEMFS_MAX_PATH must be greater than MAX_PATH.");
-
 #define MEMFS_SECTOR_SIZE               512
 #define MEMFS_SECTORS_PER_ALLOCATION_UNIT 1
 
-typedef struct _MEMFS MEMFS;
+#include <winfsp/winfsp.h>
 
+#include <functional>
+
+FSP_FSCTL_STATIC_ASSERT(MEMFS_MAX_PATH > MAX_PATH,
+    "MEMFS_MAX_PATH must be greater than MAX_PATH.");
+
+typedef struct _MEMFS MEMFS;
 typedef struct _MEMFS_FILE_PROVIDER MEMFS_FILE_PROVIDER;
 
 enum

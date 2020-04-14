@@ -1,8 +1,6 @@
 #include "../MountedBuild.h"
 #include "../checks/winfspcheck.h"
 
-#include <UserEnv.h>
-
 static inline const char* humanSize(uint64_t bytes)
 {
     char* suffix[] = { "B", "KB", "MB", "GB", "TB" };

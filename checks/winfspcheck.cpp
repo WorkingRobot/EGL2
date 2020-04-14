@@ -2,11 +2,10 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <ShlObj_core.h>
 
 #include <filesystem>
-#include <ShlObj_core.h>
 namespace fs = std::filesystem;
-
 
 bool alreadyLoaded = false;
 

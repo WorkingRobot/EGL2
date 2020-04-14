@@ -1,17 +1,10 @@
 #include "manifest.h"
+
 #include "http.h"
 #include <rapidjson/document.h>
 
-#include <string>
-#include <vector>
-#include <map>
-#include <unordered_map>
-#include <filesystem>
-#include <sstream>
-#include <iomanip>
 #include <numeric>
-#include <inttypes.h>
-
+#include <filesystem>
 namespace fs = std::filesystem;
 
 typedef struct _MANIFEST_CHUNK {
@@ -94,9 +87,9 @@ enum class EFeatureLevel : int32_t
 
 typedef std::unique_ptr<MANIFEST_FILE[]> MANIFEST_FILE_LIST;
 typedef std::unique_ptr<std::shared_ptr<MANIFEST_CHUNK>[]> MANIFEST_CHUNK_LIST;
-auto hash = [](const char* n) { return (*((uint64_t*)n)) ^ (*(((uint64_t*)n) + 1)); };
-auto equal = [](const char* a, const char* b) {return !memcmp(a, b, 16); };
-typedef std::unordered_map<char*, uint32_t, decltype(hash), decltype(equal)> MANIFEST_CHUNK_LOOKUP;
+auto guidHash = [](const char* n) { return (*((uint64_t*)n)) ^ (*(((uint64_t*)n) + 1)); };
+auto guidEqual = [](const char* a, const char* b) {return !memcmp(a, b, 16); };
+typedef std::unordered_map<char*, uint32_t, decltype(guidHash), decltype(guidEqual)> MANIFEST_CHUNK_LOOKUP;
 typedef struct _MANIFEST {
 	EFeatureLevel FeatureLevel;
 	bool bIsFileData;

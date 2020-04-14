@@ -1,8 +1,8 @@
 #pragma once
 
-#include <wx/wx.h>
-
 #include "cMain.h"
+
+#include <wx/wx.h>
 
 class cApp : public wxApp
 {

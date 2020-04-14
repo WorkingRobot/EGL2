@@ -1,16 +1,17 @@
 #include "storage.h"
+
+#define STORAGE_CHUNKS_RESERVE 64 // number of chunks to keep in memory at the same time
+
 #include "../web/http.h"
 #include "../containers/iterable_queue.h"
 #include "compression.h"
 #include "sha.h"
 
-#include <filesystem>
-#include <queue>
 #include <libdeflate.h>
 
+#include <queue>
+#include <filesystem>
 namespace fs = std::filesystem;
-
-#define STORAGE_CHUNKS_RESERVE 64
 
 enum class CHUNK_STATUS {
     Unavailable, // Readable from download

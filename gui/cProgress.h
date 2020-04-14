@@ -3,8 +3,9 @@
 #include "cMain.h"
 #include "../containers/cancel_flag.h"
 
-#include <queue>
 #include <wx/wx.h>
+
+#include <queue>
 
 class cProgress : public wxFrame
 {

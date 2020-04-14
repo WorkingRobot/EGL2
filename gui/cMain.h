@@ -2,6 +2,7 @@
 
 #include "../MountedBuild.h"
 #include "settings.h"
+
 #include <wx/wx.h>
 
 class cMain : public wxFrame

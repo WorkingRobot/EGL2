@@ -1,13 +1,11 @@
 #pragma once
 
-#include <memory>
-#include <filesystem>
-
 #include "containers/cancel_flag.h"
 #include "filesystem/memfs.h"
 #include "web/manifest.h"
 #include "storage/storage.h"
 
+#include <filesystem>
 namespace fs = std::filesystem;
 
 typedef std::function<void(uint32_t max)> ProgressSetMaxHandler;

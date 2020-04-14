@@ -1,3 +1,5 @@
+// Taken from https://stackoverflow.com/a/11044337
+
 #include <string>
 #include <algorithm>    // find
 

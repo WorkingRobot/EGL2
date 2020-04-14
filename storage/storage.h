@@ -1,7 +1,8 @@
 #pragma once
-#include <cstdint>
-#include <functional>
+
 #include "../web/manifest.h"
+
+#include <functional>
 
 typedef struct _STORAGE STORAGE;
 

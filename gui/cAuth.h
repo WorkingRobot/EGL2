@@ -1,7 +1,6 @@
 #pragma once
 
 #include "cMain.h"
-
 #include "wxModalWindow.h"
 
 #include <wx/wx.h>

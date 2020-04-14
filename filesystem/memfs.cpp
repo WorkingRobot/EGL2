@@ -1,10 +1,7 @@
-
 #include "memfs.h"
-#include <sddl.h>
-#include <VersionHelpers.h>
+
 #include <cassert>
 #include <map>
-#include <unordered_map>
 
 /*
  * Custom Read/Write Support

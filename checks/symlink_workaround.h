@@ -5,7 +5,7 @@
 // - Developer mode is active (Win10 only)
 // - Local Security Policy (secpol.msc): Local Policies -> User Rights Assignment -> Create symbolic links: must include the user's group/SID here (ties into first bullet point)
 //
-// A terrible security workaround, but I'm unsure if there is any other way around it.
+// A terrible security workaround, but I'm unsure if there is any other better way around it.
 
 // Implementation of workaround:
 // if (!IsDeveloperModeEnabled()) {
@@ -16,7 +16,6 @@
 //         EnableDeveloperMode();
 //     }
 // }
-
 
 bool IsUserAdmin();
 

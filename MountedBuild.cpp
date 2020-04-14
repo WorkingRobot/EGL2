@@ -4,17 +4,13 @@
 #include "containers/semaphore.h"
 #include "containers/file_sha.h"
 
-#include <functional>
-#include <codecvt>
-#include <set>
 #include <unordered_set>
-#include <iostream>
 #include <sddl.h>
 
 #define fail(format, ...)               FspServiceLog(EVENTLOG_ERROR_TYPE, format, ##__VA_ARGS__)
 
 #define SDDL_OWNER "S-1-5-18" // Local System
-#define SDDL_DATA  "P(A;ID;FRFX;;;WD)"
+#define SDDL_DATA  "P(A;ID;FRFX;;;WD)" // Protected from inheritance, allows it and it's children to give read and execure access to everyone
 #define LOG_FLAGS  0 // can also be -1 for all flags
 
 #define SDDL_ROOT  "D:" SDDL_DATA
@@ -229,14 +225,14 @@ bool MountedBuild::PreloadAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHa
 
 #define HTONLL(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
 #define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
-auto hash = [](const char* n) { return (*((uint64_t*)n)) ^ (*(((uint64_t*)n) + 1)); };
-auto equal = [](const char* a, const char* b) {return !memcmp(a, b, 16); };
+auto guidHash = [](const char* n) { return (*((uint64_t*)n)) ^ (*(((uint64_t*)n) + 1)); };
+auto guidEqual = [](const char* a, const char* b) {return !memcmp(a, b, 16); };
 void MountedBuild::PurgeUnusedChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag) {
     std::shared_ptr<MANIFEST_CHUNK>* ChunkList;
     uint32_t ChunkCount;
     ManifestGetChunks(Manifest, &ChunkList, &ChunkCount);
 
-    std::unordered_set<char*, decltype(hash), decltype(equal)> ManifestGuids;
+    std::unordered_set<char*, decltype(guidHash), decltype(guidEqual)> ManifestGuids;
     ManifestGuids.reserve(ChunkCount);
     for (auto Chunk = ChunkList; Chunk != ChunkList + ChunkCount; Chunk++) {
         ManifestGuids.insert(ManifestChunkGetGuid(Chunk->get()));
@@ -332,6 +328,7 @@ void MountedBuild::LaunchGame(const char* additionalArgs) {
     CloseHandle(pi.hThread);
 }
 
+auto pathHash = [](const fs::path& p) { return fs::hash_value(p); };
 bool MountedBuild::Mount() {
     if (Mounted()) {
         return true;
@@ -387,7 +384,7 @@ bool MountedBuild::Mount() {
         char FilenameBuffer[128];
         FilenameBuffer[0] = '/';
         ManifestGetFiles(Manifest, &Files, &FileCount, &FileStride);
-        std::set<fs::path> directories;
+        std::unordered_set<fs::path, decltype(pathHash)> directories;
         for (int i = 0; i < FileCount * FileStride; i += FileStride) {
             ManifestFileGetName((MANIFEST_FILE*)((char*)Files + i), FilenameBuffer + 1);
             fs::path curPath = fs::path(FilenameBuffer).parent_path().make_preferred();

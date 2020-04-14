@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../storage/storage.h"
-
 #define FILE_CONFIG_MAGIC 0xE6219B27
 #define FILE_CONFIG_VERSION (uint16_t)SettingsVersion::Latest
+
+#include "../storage/storage.h"
 
 enum class SettingsVersion : uint16_t {
 	// Initial Version

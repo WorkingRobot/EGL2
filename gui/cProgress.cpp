@@ -1,6 +1,8 @@
 #include "cProgress.h"
+
 #include <wx/appprogress.h>
 
+#include <chrono>
 namespace ch = std::chrono;
 
 cProgress::cProgress(cMain* main, wxString taskName, cancel_flag& cancelFlag, float updateFreq, uint32_t maximum) : wxFrame(main, wxID_ANY, taskName + " - EGL2", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)) {

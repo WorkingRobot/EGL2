@@ -1,8 +1,18 @@
 #include "cSetup.h"
 
-#include <wx/gbsizer.h>
+#define VERIFY_TOOLTIP	"Verify data that is read from the cache and redownload\n" \
+						"it if the data is invalid.\n" \
+						"Note: You may take a small performance hit at the expense of stability."
+
+#define GAME_TOOLTIP	"In order to launch the game, a workaround must be done\n" \
+						"where all binaries are copied to a physical drive in order to\n" \
+						"prevent the anticheat from getting grumpy.\n" \
+						"Note: Depending on the install, an additional ~400MB\n" \
+						"of data will need to be allocated on your hard drive."
 
 #include "settings.h"
+
+#include <wx/gbsizer.h>
 
 static const char* compMethods[] = {
 	"Keep Compressed as Downloaded (zLib)",
@@ -18,16 +28,6 @@ static const char* compLevels[] = {
 	"Slow",
 	"Slowest"
 };
-
-#define VERIFY_TOOLTIP	"Verify data that is read from the cache and redownload\n" \
-						"it if the data is invalid.\n" \
-						"Note: You may take a small performance hit at the expense of stability."
-
-#define GAME_TOOLTIP	"In order to launch the game, a workaround must be done\n" \
-						"where all binaries are copied to a physical drive in order to\n" \
-						"prevent the anticheat from getting grumpy.\n" \
-						"Note: Depending on the install, an additional ~400MB\n" \
-						"of data will need to be allocated on your hard drive."
 
 cSetup::cSetup(cMain* main, SETTINGS* settings) : wxModalWindow(main, wxID_ANY, "Setup - EGL2", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)) {
 	Settings = settings;

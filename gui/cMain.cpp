@@ -1,14 +1,4 @@
 #include "cMain.h"
-#include "cSetup.h"
-#include "cProgress.h"
-#include "cAuth.h"
-
-#include "../checks/symlink_workaround.h"
-
-#include <wx/gbsizer.h>
-#include <wx/windowptr.h>
-#include <thread>
-#include <atomic>
 
 #define DESC_TEXT_DEFAULT "Hover over a button to see what it does"
 #define DESC_TEXT_SETUP   "Click this before running for the first time. Has options for setting up your installation."
@@ -25,6 +15,17 @@
 #define STATUS_UNPLAYABLE "Started! If you want to play, enable it in your setup!"
 
 #define LAUNCH_GAME_ARGS  "-AUTH_LOGIN=unused AUTH_TYPE=exchangecode -epicapp=Fortnite -epicenv=Prod -epicportal -epiclocale=en-us -AUTH_PASSWORD=%s %s"
+
+#include "cSetup.h"
+#include "cProgress.h"
+#include "cAuth.h"
+#include "../checks/symlink_workaround.h"
+
+#include <wx/gbsizer.h>
+#include <wx/windowptr.h>
+
+#include <thread>
+#include <atomic>
 
 #define BIND_BUTTON_DESC(btn, desc) \
 	btn->Bind(wxEVT_MOTION, std::bind(&cMain::OnButtonHover, this, desc)); \
