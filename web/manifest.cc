@@ -443,7 +443,7 @@ inline int ParseInt(const char* value)
 	return std::strtol(value, nullptr, 10);
 }
 
-void UpdateManifest(MANIFEST_AUTH* Auth) {
+bool UpdateManifest(MANIFEST_AUTH* Auth) {
 	httplib::SSLClient client("account-public-service-prod03.ol.epicgames.com");
 	static const httplib::Headers headers = {
 		{ "Authorization", "basic MzhkYmZjMzE5NjAyNGQ1OTgwMzg2YTM3YjdjNzkyYmI6YTYyODBiODctZTQ1ZS00MDliLTk2ODEtOGYxNWViN2RiY2Y1" }
@@ -452,7 +452,11 @@ void UpdateManifest(MANIFEST_AUTH* Auth) {
 		{ "grant_type", "client_credentials" }
 	};
 	rapidjson::Document d;
-	d.Parse(client.Post("/account/api/oauth/token", headers, params)->body.c_str());
+	auto ptr = client.Post("/account/api/oauth/token", headers, params);
+	if (!ptr) {
+		return false;
+	}
+	d.Parse(ptr->body.c_str());
 
 	rapidjson::Value& token = d["access_token"];
 	Auth->AccessToken = token.GetString();
@@ -464,7 +468,7 @@ void UpdateManifest(MANIFEST_AUTH* Auth) {
 
 	if (expires_at.GetStringLength() < expectedLength)
 	{
-		return;
+		return false;
 	}
 
 	std::tm time = { 0 };
@@ -477,11 +481,15 @@ void UpdateManifest(MANIFEST_AUTH* Auth) {
 	time.tm_isdst = 0;
 	const int millis = expires_at.GetStringLength() > 20 ? ParseInt(&expires_str[20]) : 0;
 	Auth->ExpiresAt = std::mktime(&time) * 1000 + millis;
+
+	return true;
 }
 
 bool ManifestAuthGrab(MANIFEST_AUTH** PManifestAuth) {
 	MANIFEST_AUTH* Auth = new MANIFEST_AUTH;
-	UpdateManifest(Auth);
+	if (!UpdateManifest(Auth)) {
+		return false;
+	}
 	*PManifestAuth = Auth;
 	return true;
 }

@@ -124,7 +124,10 @@ cMain::cMain(fs::path settingsPath, fs::path manifestPath) : wxFrame(nullptr, wx
 		SetStatus(valid ? STATUS_NORMAL : STATUS_NEED_SETUP);
 	}
 
-	ManifestAuthGrab(&ManifestAuth);
+	if (!ManifestAuthGrab(&ManifestAuth)) {
+		wxMessageBox("Could not setup an internet connection. Maybe you have a VPN or proxy connected?", "Error - EGL2", wxICON_ERROR | wxOK | wxCENTRE);
+		Destroy();
+	}
 	ManifestAuthGetManifest(ManifestAuth, manifestPath, &Manifest);
 }
 
