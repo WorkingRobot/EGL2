@@ -21,12 +21,12 @@ public:
 	~MountedBuild();
 
 	bool SetupCacheDirectory();
-	bool SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount, fs::path gameDir, EnforceSymlinkCreationHandler enforceSymlinkCreation);
+	bool SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount, EnforceSymlinkCreationHandler enforceSymlinkCreation);
 	bool StartStorage(uint32_t storageFlags);
 	bool PreloadAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount);
 	void PurgeUnusedChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag);
 	void VerifyAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount);
-	void LaunchGame(fs::path gameDir, const char* additionalArgs);
+	void LaunchGame(const char* additionalArgs);
 	bool Mount();
 	bool Unmount();
 	bool Mounted();

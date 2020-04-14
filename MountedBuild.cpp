@@ -106,9 +106,11 @@ bool inline CompareFile(MANIFEST_FILE* File, fs::path FilePath) {
     return !memcmp(FileSha, ManifestFileGetSha1(File), 20);
 }
 
-bool MountedBuild::SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount, fs::path gameDir, EnforceSymlinkCreationHandler enforceSymlinkCreation) {
+bool MountedBuild::SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount, EnforceSymlinkCreationHandler enforceSymlinkCreation) {
+    auto gameDir = CacheDir / "game";
+
     if (!fs::is_directory(gameDir) && !fs::create_directories(gameDir)) {
-        LogError("can't create gamedir %s\n", gameDir.string().c_str());
+        LogError("can't create gamedir\n");
         return false;
     }
 
@@ -284,13 +286,13 @@ void MountedBuild::VerifyAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHan
     }
 }
 
-void MountedBuild::LaunchGame(fs::path gameDir, const char* additionalArgs) {
+void MountedBuild::LaunchGame(const char* additionalArgs) {
     char ExeBuf[MAX_PATH];
     char CmdBuf[512];
     ManifestGetLaunchInfo(Manifest, ExeBuf, CmdBuf);
     strcat(CmdBuf, " ");
     strcat(CmdBuf, additionalArgs);
-    fs::path exePath = gameDir / ExeBuf;
+    fs::path exePath = CacheDir / "game" / ExeBuf;
 
     PROCESS_INFORMATION pi;
     STARTUPINFOA si;
