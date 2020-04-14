@@ -3,11 +3,13 @@
 #include "cMain.h"
 #include "../containers/cancel_flag.h"
 
+#include <queue>
 #include <wx/wx.h>
 
 class cProgress : public wxFrame
 {
 	typedef std::chrono::steady_clock Clock;
+	const int queueSize = 60;
 
 public:
 	cProgress(cMain* main, wxString taskName, cancel_flag& cancelFlag, float updateFreq = .05f, uint32_t maximum = 1);
@@ -38,7 +40,7 @@ private:
 	void Update(bool force = false);
 
 	bool finished = false;
-	Clock::time_point startTime;
+	std::queue<std::pair<uint32_t, Clock::time_point>> etaTimePoints;
 	Clock::time_point lastUpdate;
 	float frequency;
 	std::atomic_uint32_t value;
