@@ -36,6 +36,20 @@ MountedBuild::~MountedBuild() {
     }
 }
 
+// 0: valid
+// 1: bad parent
+// 2: at base dir
+inline int ValidChunkFile(fs::path& CacheDir, fs::path ChunkPath) {
+    if (ChunkPath.parent_path() == CacheDir) {
+        return 2;
+    }
+    if (ChunkPath.parent_path().parent_path() != CacheDir) {
+        return 1;
+    }
+    auto name = ChunkPath.parent_path().filename().string();
+    return (name.size() == 2 && isxdigit(name[0]) && isxdigit(name[1])) ? 0 : 1;
+}
+
 bool MountedBuild::SetupCacheDirectory() {
     if (!fs::is_directory(CacheDir) && !fs::create_directories(CacheDir)) {
         LogError("can't create cachedir %s\n", CacheDir.string().c_str());
@@ -228,23 +242,34 @@ void MountedBuild::PurgeUnusedChunks(ProgressSetMaxHandler setMax, ProgressIncrH
         ManifestGuids.insert(ManifestChunkGetGuid(Chunk->get()));
     }
 
-    setMax(std::count_if(fs::recursive_directory_iterator(CacheDir), fs::recursive_directory_iterator(), [](const fs::directory_entry& f) { return f.is_regular_file(); }));
+    setMax(std::count_if(fs::recursive_directory_iterator(CacheDir), fs::recursive_directory_iterator(), [this](const fs::directory_entry& f) { return f.is_regular_file() && ValidChunkFile(CacheDir, f.path()) == 0; }));
 
     char guidBuffer[16];
     char guidBuffer2[16];
-    for (auto& p : fs::recursive_directory_iterator(CacheDir)) {
+    auto iterator = fs::recursive_directory_iterator(CacheDir);
+    for (auto& p : iterator) {
         if (cancelFlag.cancelled()) {
             break;
         }
         if (!p.is_regular_file()) {
             continue;
         }
+        auto res = ValidChunkFile(CacheDir, p.path());
+        if (res == 1) {
+            iterator.pop();
+            continue;
+        }
+        else if (res == 2) {
+            continue;
+        }
 
-        sscanf(p.path().filename().string().c_str(), "%016llX%016llX", guidBuffer2, guidBuffer2 + 8);
-        *(unsigned long long*)guidBuffer = HTONLL(*(unsigned long long*)guidBuffer2);
-        *(unsigned long long*)(guidBuffer + 8) = HTONLL(*(unsigned long long*)(guidBuffer2 + 8));
-        if (!ManifestGuids.erase(guidBuffer)) {
-            fs::remove(p);
+        auto filename = p.path().filename().string();
+        if (filename.size() == 32 && sscanf(filename.c_str(), "%016llX%016llX", guidBuffer2, guidBuffer2 + 8) == 2) {
+            *(unsigned long long*)guidBuffer = HTONLL(*(unsigned long long*)guidBuffer2);
+            *(unsigned long long*)(guidBuffer + 8) = HTONLL(*(unsigned long long*)(guidBuffer2 + 8));
+            if (!ManifestGuids.erase(guidBuffer)) {
+                fs::remove(p);
+            }
         }
         progress();
     }
@@ -254,7 +279,7 @@ void MountedBuild::VerifyAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHan
     std::shared_ptr<MANIFEST_CHUNK>* ChunkList;
     uint32_t ChunkCount;
     ManifestGetChunks(Manifest, &ChunkList, &ChunkCount);
-    setMax(ChunkCount);
+    setMax((std::min)(ChunkCount, (uint32_t)std::count_if(fs::recursive_directory_iterator(CacheDir), fs::recursive_directory_iterator(), [this](const fs::directory_entry& f) { return f.is_regular_file() && ValidChunkFile(CacheDir, f.path()) == 0; })));
 
     iterable_queue<std::thread> threads;
 
