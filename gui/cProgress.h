@@ -10,7 +10,7 @@
 class cProgress : public wxFrame
 {
 	typedef std::chrono::steady_clock Clock;
-	const int queueSize = 60;
+	const int queueSize = 200;
 
 public:
 	cProgress(cMain* main, wxString taskName, cancel_flag& cancelFlag, float updateFreq = .05f, uint32_t maximum = 1);

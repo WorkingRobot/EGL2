@@ -73,6 +73,10 @@ inline wxString FormatTime(ch::seconds secs) {
 	return wxString::Format("%02d:%02d:%02d", hour.count(), mins.count(), int(secs.count()));
 }
 
+inline ch::seconds GetETA(ch::nanoseconds duration, uint32_t amt, uint32_t targetAmt) {
+	return amt ? ch::duration_cast<ch::seconds>(duration * targetAmt / amt) : ch::seconds::zero();
+}
+
 inline void cProgress::Update(bool force) {
 	auto now = Clock::now();
 	ch::duration<float> duration = now - lastUpdate;
@@ -92,10 +96,7 @@ inline void cProgress::Update(bool force) {
 		progressTimeElapsed->SetLabel("Elapsed: " + FormatTime(elapsed));
 
 		auto& timePoint = etaTimePoints.front();
-		auto etaElapsed = ch::duration_cast<ch::seconds>(now - timePoint.second);
-		auto etaCount = value - timePoint.first;
-		auto etaDivisor = float(maxValue - etaCount) / etaCount;
-		auto eta = etaDivisor ? ch::duration_cast<ch::seconds>(elapsed * etaDivisor) : ch::seconds::zero();
+		auto eta = GetETA(now - timePoint.second, value - timePoint.first, maxValue - value);
 		progressTimeETA->SetLabel("ETA: " + FormatTime(eta));
 
 		etaTimePoints.push(std::make_pair(value.load(), now));
