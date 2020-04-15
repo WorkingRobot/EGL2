@@ -42,6 +42,7 @@ private:
 
 	bool finished = false;
 	std::queue<std::pair<uint32_t, Clock::time_point>> etaTimePoints;
+	Clock::time_point startTime;
 	Clock::time_point lastUpdate;
 	float frequency;
 	std::atomic_uint32_t value;

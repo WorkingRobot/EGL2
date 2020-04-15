@@ -9,7 +9,8 @@ cProgress::cProgress(cMain* main, wxString taskName, cancel_flag& cancelFlag, fl
 	value = 0;
 	frequency = updateFreq;
 	maxValue = maximum;
-	etaTimePoints.push(std::make_pair(0, Clock::now()));
+	startTime = Clock::now();
+	etaTimePoints.push(std::make_pair(0, startTime));
 
 	this->SetIcon(wxICON(APP_ICON));
 	this->SetMinSize(wxSize(400, -1));
@@ -87,10 +88,11 @@ inline void cProgress::Update(bool force) {
 		progressPercent->SetLabel(wxString::Format("%.2f%%", float(value) * 100 / maxValue));
 		progressTotal->SetLabel(wxString::Format("%u / %u", value.load(), maxValue));
 
-		auto& timePoint = etaTimePoints.front();
-		auto elapsed = ch::duration_cast<ch::seconds>(now - timePoint.second);
+		auto elapsed = ch::duration_cast<ch::seconds>(now - startTime);
 		progressTimeElapsed->SetLabel("Elapsed: " + FormatTime(elapsed));
 
+		auto& timePoint = etaTimePoints.front();
+		auto etaElapsed = ch::duration_cast<ch::seconds>(now - timePoint.second);
 		auto etaCount = value - timePoint.first;
 		auto etaDivisor = float(maxValue - etaCount) / etaCount;
 		auto eta = etaDivisor ? ch::duration_cast<ch::seconds>(elapsed * etaDivisor) : ch::seconds::zero();
