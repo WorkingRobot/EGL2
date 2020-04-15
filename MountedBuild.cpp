@@ -4,6 +4,7 @@
 #include "containers/semaphore.h"
 #include "containers/file_sha.h"
 
+#include <set>
 #include <unordered_set>
 #include <sddl.h>
 
@@ -145,6 +146,9 @@ bool MountedBuild::SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncr
             if (folderPath.filename() == "Binaries") {
                 if (!CompareFile(File, gameDir / filePath)) {
                     PreloadFile(Storage, File, threadCount, cancelFlag);
+                    if (fs::status(gameDir / filePath).type() == fs::file_type::regular) {
+                        fs::permissions(gameDir / filePath, fs::perms::_All_write, fs::perm_options::add); // copying over a file from the drive gives it the read-only attribute, this overrides that
+                    }
                     if (!fs::copy_file(MountDir / filePath, gameDir / filePath, fs::copy_options::overwrite_existing)) {
                         LogError("failed to copy %s\n", filePath.string().c_str());
                     }
@@ -328,7 +332,6 @@ void MountedBuild::LaunchGame(const char* additionalArgs) {
     CloseHandle(pi.hThread);
 }
 
-auto pathHash = [](const fs::path& p) { return fs::hash_value(p); };
 bool MountedBuild::Mount() {
     if (Mounted()) {
         return true;
@@ -384,7 +387,7 @@ bool MountedBuild::Mount() {
         char FilenameBuffer[128];
         FilenameBuffer[0] = '/';
         ManifestGetFiles(Manifest, &Files, &FileCount, &FileStride);
-        std::unordered_set<fs::path, decltype(pathHash)> directories;
+        std::set<fs::path> directories;
         for (int i = 0; i < FileCount * FileStride; i += FileStride) {
             ManifestFileGetName((MANIFEST_FILE*)((char*)Files + i), FilenameBuffer + 1);
             fs::path curPath = fs::path(FilenameBuffer).parent_path().make_preferred();

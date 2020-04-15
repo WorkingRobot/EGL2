@@ -9,7 +9,7 @@ namespace fs = std::filesystem;
 inline bool SHAFile(fs::path path, char OutHash[SHA_DIGEST_LENGTH]) {
     constexpr int buffer_size = 1 << 13;
     char buffer[buffer_size];
-
+    
     SHA_CTX ctx;
     SHA1_Init(&ctx);
 
