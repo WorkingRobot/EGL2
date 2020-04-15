@@ -129,7 +129,8 @@ cMain::cMain(fs::path settingsPath, fs::path manifestPath) : wxFrame(nullptr, wx
 		wxMessageBox("Could not setup an internet connection. Maybe you have a VPN or proxy connected?", "Error - EGL2", wxICON_ERROR | wxOK | wxCENTRE);
 		Destroy();
 	}
-	ManifestAuthGetManifest(ManifestAuth, manifestPath, &Manifest);
+	ManifestCachePath = manifestPath;
+	ManifestAuthGetManifest(ManifestAuth, ManifestCachePath, &Manifest);
 }
 
 cMain::~cMain() {
@@ -192,6 +193,13 @@ void cMain::OnPurgeClicked() {
 }
 
 void cMain::OnPreloadClicked() {
+	auto& build = GetMountedBuild();
+	if (!build->Mounted()) {
+		build.reset();
+		ManifestDelete(Manifest);
+		ManifestAuthGetManifest(ManifestAuth, ManifestCachePath, &Manifest);
+	}
+
 	RUN_PROGRESS("Updating", PreloadAllChunks, 64);
 }
 

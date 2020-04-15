@@ -50,6 +50,7 @@ private:
 	std::unique_ptr<MountedBuild> Build;
 
 	MANIFEST_AUTH* ManifestAuth;
+	fs::path ManifestCachePath;
 	MANIFEST* Manifest;
 };
 
