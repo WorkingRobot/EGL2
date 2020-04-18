@@ -1,7 +1,7 @@
 #pragma once
 
 #include "containers/cancel_flag.h"
-#include "filesystem/memfs.h"
+#include "filesystem/egfs.h"
 #include "web/manifest.h"
 #include "storage/storage.h"
 
@@ -32,15 +32,12 @@ public:
 private:
 	void LogError(const char* format, ...);
 
-	PVOID FileOpen(PCWSTR fileName, UINT64* fileSize);
-	void FileClose(PVOID Handle);
 	void FileRead(PVOID Handle, PVOID Buffer, UINT64 offset, ULONG length, ULONG* bytesRead);
 
 	fs::path MountDir;
 	fs::path CacheDir;
 	MANIFEST* Manifest;
 	STORAGE* Storage;
-	MEMFS* Memfs;
-	MEMFS_FILE_PROVIDER* Provider;
+	EGFS* Egfs;
 	ErrorHandler Error;
 };

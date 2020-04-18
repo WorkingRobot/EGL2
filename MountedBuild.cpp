@@ -23,7 +23,7 @@ MountedBuild::MountedBuild(MANIFEST* manifest, fs::path mountDir, fs::path cache
     this->CacheDir = cachePath;
     this->Error = error;
     this->Storage = nullptr;
-    this->Memfs = nullptr;
+    this->Egfs = nullptr;
 }
 
 MountedBuild::~MountedBuild() {
@@ -337,47 +337,55 @@ bool MountedBuild::Mount() {
         return true;
     }
 
-    NTSTATUS Result;
-
-    FspDebugLogSetHandle(GetStdHandle(STD_ERROR_HANDLE));
-    Provider = CreateProvider( // might be a better way (lambdas cause dynamic memory allocation, but idk)
-        std::bind(&MountedBuild::FileOpen, this, std::placeholders::_1, std::placeholders::_2),
-        std::bind(&MountedBuild::FileClose, this, std::placeholders::_1),
-        std::bind(&MountedBuild::FileRead, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5)
-    );
-
+    FspDebugLogSetHandle(GetStdHandle(STD_OUTPUT_HANDLE));
 
     {
         PVOID securityDescriptor;
         ULONG securityDescriptorSize;
         if (!ConvertStringSecurityDescriptorToSecurityDescriptorA(SDDL_MEMFS, SDDL_REVISION_1, &securityDescriptor, &securityDescriptorSize)) {
-            Result = FspNtStatusFromWin32(GetLastError());
-            fail(L"invalid sddl: %08x", Result);
-            goto exit;
+            fail(L"invalid sddl: %08x", FspNtStatusFromWin32(GetLastError()));
+            return false;
         }
 
         auto downloadSize = ManifestDownloadSize(Manifest);
         auto installSize = ManifestInstallSize(Manifest);
-        Result = MemfsCreateFunnel(
-            MemfsDisk, // flags
-            INFINITE, // file timeout
-            1024, // max file nodes/files
-            L"EGL2", // file system name
-            0, // volume prefix (instead of \\server or whatever), can be optional
-            L"EGL2", // volume label
-            installSize,
-            installSize - downloadSize,
-            securityDescriptor,
-            securityDescriptorSize,
-            Provider,
-            &Memfs);
-        LocalFree(securityDescriptor);
-    }
+        EGFS_PARAMS params;
 
-    if (!NT_SUCCESS(Result))
-    {
-        fail(L"cannot create MEMFS");
-        goto exit;
+        wcscpy_s(params.FileSystemName, L"EGFS");
+        params.VolumePrefix[0] = 0;
+        // VolumePrefix stays 0 for now, maybe change it later
+        wcscpy_s(params.VolumeLabel, L"EGL2");
+        params.VolumeTotal = installSize;
+        params.VolumeFree = installSize - downloadSize;
+        params.Security = securityDescriptor;
+        params.SecuritySize = securityDescriptorSize;
+
+        params.Callbacks.Read = std::bind(&MountedBuild::FileRead, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
+
+        params.SectorSize = 512;
+        params.SectorsPerAllocationUnit = 1; // sectors per cluster (in hardware terms)
+        params.VolumeCreationTime = 0;
+        params.VolumeSerialNumber = 0;
+        params.FileInfoTimeout = INFINITE; // https://github.com/billziss-gh/winfsp/issues/19#issuecomment-289853591
+        params.CaseSensitiveSearch = true;
+        params.CasePreservedNames = true;
+        params.UnicodeOnDisk = true;
+        params.PersistentAcls = true;
+        params.ReparsePoints = true;
+        params.ReparsePointsAccessCheck = false;
+        params.PostCleanupWhenModifiedOnly = true;
+        params.FlushAndPurgeOnCleanup = false;
+        params.AllowOpenInKernelMode = true;
+
+        params.LogFlags = 0; // -1 enables all (slowdowns imminent due to console spam, though)
+
+        NTSTATUS Result;
+        Egfs = new EGFS(&params, Result);
+        if (!NT_SUCCESS(Result)) {
+            fail(L"could not create eglfs: %08x", Result);
+            return false;
+        }
+        LocalFree(securityDescriptor);
     }
 
     {
@@ -385,76 +393,26 @@ bool MountedBuild::Mount() {
         uint32_t FileCount;
         uint16_t FileStride;
         char FilenameBuffer[128];
-        FilenameBuffer[0] = '/';
         ManifestGetFiles(Manifest, &Files, &FileCount, &FileStride);
-        std::set<fs::path> directories;
         for (int i = 0; i < FileCount * FileStride; i += FileStride) {
-            ManifestFileGetName((MANIFEST_FILE*)((char*)Files + i), FilenameBuffer + 1);
-            fs::path curPath = fs::path(FilenameBuffer).parent_path().make_preferred();
-            do {
-                directories.insert(curPath);
-                curPath = curPath.parent_path();
-            } while (curPath != curPath.root_path());
-        }
-        for (auto& dir : directories) {
-            Result = CreateFsFile(Memfs, (PWSTR)dir.native().c_str(), true);
-            if (!NT_SUCCESS(Result))
-            {
-                fail(L"cannot create directory %08x", Result);
-                goto exit;
-            }
-        }
-        for (int i = 0; i < FileCount * FileStride; i += FileStride) {
-            ManifestFileGetName((MANIFEST_FILE*)((char*)Files + i), FilenameBuffer + 1);
-            Result = CreateFsFile(Memfs, (PWSTR)fs::path(FilenameBuffer).make_preferred().native().c_str(), false);
-            if (!NT_SUCCESS(Result))
-            {
-                fail(L"cannot create file %08x", Result);
-                goto exit;
-            }
+            auto File = (MANIFEST_FILE*)((char*)Files + i);
+            ManifestFileGetName(File, FilenameBuffer);
+            Egfs->AddFile(fs::path(FilenameBuffer), File, ManifestFileGetFileSize(File));
         }
     }
-
-    FspFileSystemSetDebugLog(MemfsFileSystem(Memfs), LOG_FLAGS);
 
     {
         PVOID rootSecurity;
         if (!ConvertStringSecurityDescriptorToSecurityDescriptorA(SDDL_ROOT, SDDL_REVISION_1, &rootSecurity, NULL)) {
-            Result = FspNtStatusFromWin32(GetLastError());
-            fail(L"invalid root sddl: %08x", Result);
-            goto exit;
+            fail(L"invalid root sddl: %08x", FspNtStatusFromWin32(GetLastError()));
+            return false;
         }
-        Result = FspFileSystemSetMountPointEx(MemfsFileSystem(Memfs), (PWSTR)MountDir.native().c_str(), rootSecurity);
+        Egfs->SetMountPoint(MountDir.native().c_str(), rootSecurity);
         LocalFree(rootSecurity);
     }
 
-    if (!NT_SUCCESS(Result))
-    {
-        fail(L"cannot mount MEMFS %08x", Result);
-        goto exit;
-    }
-
-    Result = MemfsStart(Memfs);
-    if (!NT_SUCCESS(Result))
-    {
-        fail(L"cannot start MEMFS %08x", Result);
-        goto exit;
-    }
-
-    Result = STATUS_SUCCESS;
-
-exit:
-    printf("result %d\n", Result);
-    if (!NT_SUCCESS(Result) && Memfs) {
-        MemfsDelete(Memfs);
-        Memfs = 0;
-    }
-
-    if (!NT_SUCCESS(Result)) {
-        fail(L"Failed: %d", Result);
-    }
-
-    return NT_SUCCESS(Result);
+    Egfs->Start();
+    return true;
 }
 
 bool MountedBuild::Unmount() {
@@ -462,15 +420,14 @@ bool MountedBuild::Unmount() {
         return true;
     }
 
-    MemfsStop(Memfs);
-    MemfsDelete(Memfs);
-    Memfs = 0;
+    delete Egfs;
+    Egfs = nullptr;
 
     return true;
 }
 
 bool MountedBuild::Mounted() {
-    return Memfs;
+    return Egfs;
 }
 
 void MountedBuild::LogError(const char* format, ...)
@@ -482,21 +439,6 @@ void MountedBuild::LogError(const char* format, ...)
     va_end(argp);
     Error(buf);
     delete[] buf;
-}
-
-PVOID MountedBuild::FileOpen(PCWSTR fileName, UINT64* fileSize) {
-    auto File = ManifestGetFile(Manifest, fs::path(fileName).generic_string().c_str() + 1);
-    if (File) {
-        *fileSize = ManifestFileGetFileSize(File);
-    }
-    else {
-        *fileSize = 0;
-    }
-    return File;
-}
-
-void MountedBuild::FileClose(PVOID Handle) {
-    // no need to do anything, it's just a MANIFEST_FILE*
 }
 
 void MountedBuild::FileRead(PVOID Handle, PVOID Buffer, UINT64 offset, ULONG length, ULONG* bytesRead) {
