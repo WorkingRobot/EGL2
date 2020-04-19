@@ -5,14 +5,14 @@ EGFS::EGFS(EGFS_PARAMS* Params, NTSTATUS& ErrorCode) :
     IsStarted(false)
 {
 	if (!Params) {
-        ErrorCode = 420;
+        ErrorCode = STATUS_BAD_DATA;
 		return;
 	}
 
     NTSTATUS Result;
     BOOLEAN Inserted;
 
-    Callbacks = Params->Callbacks;
+    OnRead = Params->OnRead;
     Security = new char[Params->SecuritySize];
     SecuritySize = Params->SecuritySize;
     memcpy(Security, Params->Security, Params->SecuritySize);
@@ -124,7 +124,7 @@ void EGFS::GetFileInfo(container_type* file, FSP_FSCTL_FILE_INFO* info)
 void EGFS::GetFileInfo(node_type* file, FSP_FSCTL_FILE_INFO* info)
 {
     if (auto filePtr = std::get_if<EGFS_FILE>(file)) {
-        // these can be simplified away (unimportant, just for looks)
+        // these can technically be simplified away (unimportant, just for looks)
         info->CreationTime = filePtr->CreationTime;
         info->LastAccessTime = filePtr->AccessTime;
         info->LastWriteTime = filePtr->WriteTime;
@@ -207,15 +207,13 @@ NTSTATUS EGFS::GetSecurityByName(FSP_FILE_SYSTEM* FileSystem, PWSTR FileName, PU
     auto file = Egfs->Files.GetFile(FileName);
     if (!file)
     {
-        //Result = STATUS_OBJECT_NAME_NOT_FOUND;
-        //MemfsFileNodeMapGetParent(Memfs->FileNodeMap, FileName, &Result);
         return STATUS_OBJECT_NAME_NOT_FOUND;
     }
 
-    if (0 != PFileAttributes)
+    if (PFileAttributes)
         *PFileAttributes = GetFileAttributes(file);
 
-    if (0 != PSecurityDescriptorSize)
+    if (PSecurityDescriptorSize)
     {
         if (Egfs->SecuritySize > *PSecurityDescriptorSize)
         {
@@ -225,30 +223,25 @@ NTSTATUS EGFS::GetSecurityByName(FSP_FILE_SYSTEM* FileSystem, PWSTR FileName, PU
 
         *PSecurityDescriptorSize = Egfs->SecuritySize;
 
-        if (0 != SecurityDescriptor)
+        if (SecurityDescriptor)
             memcpy(SecurityDescriptor, Egfs->Security, Egfs->SecuritySize);
     }
 
     return STATUS_SUCCESS;
 }
 
-NTSTATUS EGFS::Create(FSP_FILE_SYSTEM* FileSystem, PWSTR FileName, UINT32 CreateOptions, UINT32 GrantedAccess, UINT32 FileAttributes, PSECURITY_DESCRIPTOR SecurityDescriptor, UINT64 AllocationSize, PVOID* PFileNode, FSP_FSCTL_FILE_INFO* FileInfo)
+NTSTATUS EGFS::Create(FSP_FILE_SYSTEM* FileSystem, PWSTR FileName, UINT32 CreateOptions, UINT32 GrantedAccess, UINT32 FileAttributes, PSECURITY_DESCRIPTOR SecurityDescriptor, UINT64 AllocationSize, PVOID* PFileContext, FSP_FSCTL_FILE_INFO* FileInfo)
 {
     return STATUS_ACCESS_DENIED;
 }
 
-NTSTATUS EGFS::Open(FSP_FILE_SYSTEM* FileSystem, PWSTR FileName, UINT32 CreateOptions, UINT32 GrantedAccess, PVOID* PFileNode, FSP_FSCTL_FILE_INFO* FileInfo)
+NTSTATUS EGFS::Open(FSP_FILE_SYSTEM* FileSystem, PWSTR FileName, UINT32 CreateOptions, UINT32 GrantedAccess, PVOID* PFileContext, FSP_FSCTL_FILE_INFO* FileInfo)
 {
     auto Egfs = (EGFS*)FileSystem->UserContext;
-
-    if (EGFS_MAX_PATH <= wcslen(FileName))
-        return STATUS_OBJECT_NAME_INVALID;
 
     auto file = Egfs->Files.GetFile(FileName);
     if (!file)
     {
-        //Result = STATUS_OBJECT_NAME_NOT_FOUND;
-        //MemfsFileNodeMapGetParent(Memfs->FileNodeMap, FileName, &Result);
         return STATUS_OBJECT_NAME_NOT_FOUND;
     }
 
@@ -257,32 +250,31 @@ NTSTATUS EGFS::Open(FSP_FILE_SYSTEM* FileSystem, PWSTR FileName, UINT32 CreateOp
         return STATUS_ACCESS_DENIED;
     }
 
-    *PFileNode = file;
+    *PFileContext = file;
     GetFileInfo(file, FileInfo);
 
     return STATUS_SUCCESS;
 }
 
-NTSTATUS EGFS::Overwrite(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0, UINT32 FileAttributes, BOOLEAN ReplaceFileAttributes, UINT64 AllocationSize, FSP_FSCTL_FILE_INFO* FileInfo)
+NTSTATUS EGFS::Overwrite(FSP_FILE_SYSTEM* FileSystem, PVOID FileContext, UINT32 FileAttributes, BOOLEAN ReplaceFileAttributes, UINT64 AllocationSize, FSP_FSCTL_FILE_INFO* FileInfo)
 {
     return STATUS_ACCESS_DENIED;
 }
 
-VOID EGFS::Cleanup(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0, PWSTR FileName, ULONG Flags)
-{
-    // I've never ever seen this called (when only reading)
-    return; // never should be called if done correctly (PostCleanupWhenModifiedOnly I believe)
-}
-
-VOID EGFS::Close(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0)
+VOID EGFS::Cleanup(FSP_FILE_SYSTEM* FileSystem, PVOID FileContext, PWSTR FileName, ULONG Flags)
 {
     return;
 }
 
-NTSTATUS EGFS::Read(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0, PVOID Buffer, UINT64 Offset, ULONG Length, PULONG PBytesTransferred)
+VOID EGFS::Close(FSP_FILE_SYSTEM* FileSystem, PVOID FileContext)
+{
+    return;
+}
+
+NTSTATUS EGFS::Read(FSP_FILE_SYSTEM* FileSystem, PVOID FileContext, PVOID Buffer, UINT64 Offset, ULONG Length, PULONG PBytesTransferred)
 {
     auto Egfs = (EGFS*)FileSystem->UserContext;
-    node_type* FileNode = (node_type*)FileNode0;
+    node_type* FileNode = (node_type*)FileContext;
     UINT64 EndOffset;
 
     if (Offset >= GetFileSize(FileNode))
@@ -294,22 +286,22 @@ NTSTATUS EGFS::Read(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0, PVOID Buffer, 
     if (EndOffset > GetFileSize(FileNode))
         EndOffset = GetFileSize(FileNode);
 
-    Egfs->Callbacks.Read(FilePtr->Context, Buffer, Offset, (size_t)(EndOffset - Offset), PBytesTransferred);
+    Egfs->OnRead(FilePtr->Context, Buffer, Offset, (size_t)(EndOffset - Offset), PBytesTransferred);
 
     return STATUS_SUCCESS;
 }
 
-NTSTATUS EGFS::Write(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0, PVOID Buffer, UINT64 Offset, ULONG Length, BOOLEAN WriteToEndOfFile, BOOLEAN ConstrainedIo, PULONG PBytesTransferred, FSP_FSCTL_FILE_INFO* FileInfo)
+NTSTATUS EGFS::Write(FSP_FILE_SYSTEM* FileSystem, PVOID FileContext, PVOID Buffer, UINT64 Offset, ULONG Length, BOOLEAN WriteToEndOfFile, BOOLEAN ConstrainedIo, PULONG PBytesTransferred, FSP_FSCTL_FILE_INFO* FileInfo)
 {
     *PBytesTransferred = 0;
     return STATUS_ACCESS_DENIED;
 }
 
-NTSTATUS EGFS::Flush(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0, FSP_FSCTL_FILE_INFO* FileInfo)
+NTSTATUS EGFS::Flush(FSP_FILE_SYSTEM* FileSystem, PVOID FileContext, FSP_FSCTL_FILE_INFO* FileInfo)
 {
-    node_type* FileNode = (node_type*)FileNode0;
+    node_type* FileNode = (node_type*)FileContext;
 
-    if (0 != FileNode)
+    if (FileNode)
     {
         GetFileInfo(FileNode, FileInfo);
     }
@@ -317,100 +309,80 @@ NTSTATUS EGFS::Flush(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0, FSP_FSCTL_FIL
     return STATUS_SUCCESS;
 }
 
-NTSTATUS EGFS::GetFileInfo(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0, FSP_FSCTL_FILE_INFO* FileInfo)
+NTSTATUS EGFS::GetFileInfo(FSP_FILE_SYSTEM* FileSystem, PVOID FileContext, FSP_FSCTL_FILE_INFO* FileInfo)
 {
-    node_type* FileNode = (node_type*)FileNode0;
+    node_type* FileNode = (node_type*)FileContext;
 
     GetFileInfo(FileNode, FileInfo);
 
     return STATUS_SUCCESS;
 }
 
-NTSTATUS EGFS::SetBasicInfo(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0, UINT32 FileAttributes, UINT64 CreationTime, UINT64 LastAccessTime, UINT64 LastWriteTime, UINT64 ChangeTime, FSP_FSCTL_FILE_INFO* FileInfo)
+NTSTATUS EGFS::SetBasicInfo(FSP_FILE_SYSTEM* FileSystem, PVOID FileContext, UINT32 FileAttributes, UINT64 CreationTime, UINT64 LastAccessTime, UINT64 LastWriteTime, UINT64 ChangeTime, FSP_FSCTL_FILE_INFO* FileInfo)
 {
     return STATUS_ACCESS_DENIED; // maybe return success just in case?
 }
 
-NTSTATUS EGFS::SetFileSize(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0, UINT64 NewSize, BOOLEAN SetAllocationSize, FSP_FSCTL_FILE_INFO* FileInfo)
+NTSTATUS EGFS::SetFileSize(FSP_FILE_SYSTEM* FileSystem, PVOID FileContext, UINT64 NewSize, BOOLEAN SetAllocationSize, FSP_FSCTL_FILE_INFO* FileInfo)
 {
     return STATUS_INSUFFICIENT_RESOURCES; // might set to access denied, i'm unsure
 }
 
-NTSTATUS EGFS::CanDelete(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0, PWSTR FileName)
+NTSTATUS EGFS::CanDelete(FSP_FILE_SYSTEM* FileSystem, PVOID FileContext, PWSTR FileName)
 {
     return STATUS_ACCESS_DENIED;
 }
 
-NTSTATUS EGFS::Rename(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0, PWSTR FileName, PWSTR NewFileName, BOOLEAN ReplaceIfExists)
+NTSTATUS EGFS::Rename(FSP_FILE_SYSTEM* FileSystem, PVOID FileContext, PWSTR FileName, PWSTR NewFileName, BOOLEAN ReplaceIfExists)
 {
     return STATUS_ACCESS_DENIED;
 }
 
-NTSTATUS EGFS::GetSecurity(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0, PSECURITY_DESCRIPTOR SecurityDescriptor, SIZE_T* PSecurityDescriptorSize)
+NTSTATUS EGFS::GetSecurity(FSP_FILE_SYSTEM* FileSystem, PVOID FileContext, PSECURITY_DESCRIPTOR SecurityDescriptor, SIZE_T* PSecurityDescriptorSize)
 {
     auto Egfs = (EGFS*)FileSystem->UserContext;
-    node_type* FileNode = (node_type*)FileNode0;
+    node_type* FileNode = (node_type*)FileContext;
 
-    if (Egfs->SecuritySize > * PSecurityDescriptorSize)
+    if (Egfs->SecuritySize > *PSecurityDescriptorSize)
     {
         *PSecurityDescriptorSize = Egfs->SecuritySize;
         return STATUS_BUFFER_OVERFLOW;
     }
 
     *PSecurityDescriptorSize = Egfs->SecuritySize;
-    if (0 != SecurityDescriptor)
+    if (SecurityDescriptor)
         memcpy(SecurityDescriptor, Egfs->Security, Egfs->SecuritySize);
 
     return STATUS_SUCCESS;
 }
 
-NTSTATUS EGFS::SetSecurity(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0, SECURITY_INFORMATION SecurityInformation, PSECURITY_DESCRIPTOR ModificationDescriptor)
+NTSTATUS EGFS::SetSecurity(FSP_FILE_SYSTEM* FileSystem, PVOID FileContext, SECURITY_INFORMATION SecurityInformation, PSECURITY_DESCRIPTOR ModificationDescriptor)
 {
     return STATUS_ACCESS_DENIED;
 }
 
-// Marker is relative to FileNode0
-NTSTATUS EGFS::ReadDirectory(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0, PWSTR Pattern, PWSTR Marker, PVOID Buffer, ULONG Length, PULONG PBytesTransferred)
+NTSTATUS EGFS::ReadDirectory(FSP_FILE_SYSTEM* FileSystem, PVOID FileContext, PWSTR Pattern, PWSTR Marker, PVOID Buffer, ULONG Length, PULONG PBytesTransferred)
 {
-    //assert(0 == Pattern);
-
     auto Egfs = (EGFS*)FileSystem->UserContext;
-    node_type* FileNode = (node_type*)FileNode0;
+    node_type* FileNode = (node_type*)FileContext;
     container_type* FolderNode = std::get_if<container_type>(FileNode);
     if (!FolderNode) {
         return STATUS_NOT_A_DIRECTORY;
     }
 
-    auto iter = FolderNode->begin();
-    if (Marker) {
-        auto marker = FolderNode->Children.find(Marker);
-        if (marker != FolderNode->Children.end()) {
-            iter = marker;
-        }
-    }
-
-    /*
-    Isn't used, can be utilized in future use, maybe
-    std::wstring folderName;
-    {
-        folderName.reserve(EGFS_MAX_PATH);
-        for (auto parent = FolderNodePtr; parent; parent = parent->Parent) {
-            folderName.insert(0, 1, L'\\');
-            folderName.insert(0, *parent->Name);
-        }
-    }
-    */
-
-    // reuse for recalculations, etc.
-    UINT8 DirInfoBuf[sizeof(FSP_FSCTL_DIR_INFO) + EGFS_MAX_PATH * sizeof(WCHAR)];
-    FSP_FSCTL_DIR_INFO* DirInfo = (FSP_FSCTL_DIR_INFO*)DirInfoBuf;
-    memset(DirInfo->Padding, 0, sizeof(DirInfo->Padding));
+    std::vector<UINT8> DirInfoBuf;
+    DirInfoBuf.resize(sizeof(FSP_FSCTL_DIR_INFO) + 32 * sizeof(WCHAR));
+    memset(((FSP_FSCTL_DIR_INFO*)DirInfoBuf.data())->Padding, 0, sizeof(FSP_FSCTL_DIR_INFO::Padding));
 
 #define ADD_DIR_INFO(Node, Name, NameLen)                                       \
 {                                                                               \
+    UINT16 size = sizeof(FSP_FSCTL_DIR_INFO) + NameLen * sizeof(WCHAR);         \
+    DirInfoBuf.reserve(size);                                                   \
+    FSP_FSCTL_DIR_INFO* DirInfo = (FSP_FSCTL_DIR_INFO*)DirInfoBuf.data();       \
+                                                                                \
+    DirInfo->Size = size;                                                       \
     GetFileInfo(Node, &DirInfo->FileInfo);                                      \
     memcpy(DirInfo->FileNameBuf, Name, NameLen * sizeof(WCHAR));                \
-    DirInfo->Size = sizeof(FSP_FSCTL_DIR_INFO) + NameLen * sizeof(WCHAR);       \
                                                                                 \
     if (!FspFileSystemAddDirInfo(DirInfo, Buffer, Length, PBytesTransferred)) { \
         return STATUS_SUCCESS;                                                  \
@@ -419,14 +391,28 @@ NTSTATUS EGFS::ReadDirectory(FSP_FILE_SYSTEM* FileSystem, PVOID FileNode0, PWSTR
 
     // add . and .. if not root node
     if (FolderNode->Parent) {
-        ADD_DIR_INFO(FolderNode, L".", 1);
-        ADD_DIR_INFO(const_cast<container_type*>(FolderNode->Parent), L"..", 2);
+        if (!Marker) {
+            ADD_DIR_INFO(FolderNode, L".", 1);
+        }
+        if (!Marker || (Marker[0] == L'.' && Marker[1] == L'\0')) {
+            ADD_DIR_INFO(const_cast<container_type*>(FolderNode->Parent), L"..", 2);
+            Marker = 0;
+        }
     }
 
-    for (; iter != FolderNode->end(); ++iter) {
-        ADD_DIR_INFO(&iter->second, iter->first.c_str(), iter->first.size());
+    auto iter = FolderNode->begin();
+    if (Marker) {
+        auto marker = FolderNode->Children.find(Marker);
+        if (marker != FolderNode->Children.end()) {
+            iter = ++marker;
+        }
     }
-    // EOF value
+
+    while (iter != FolderNode->end()) {
+        ADD_DIR_INFO(&iter->second, iter->first.c_str(), iter->first.size());
+        ++iter;
+    }
+    // EOF marker
     FspFileSystemAddDirInfo(NULL, Buffer, Length, PBytesTransferred);
 
     return STATUS_SUCCESS;

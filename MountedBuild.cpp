@@ -360,7 +360,7 @@ bool MountedBuild::Mount() {
         params.Security = securityDescriptor;
         params.SecuritySize = securityDescriptorSize;
 
-        params.Callbacks.Read = std::bind(&MountedBuild::FileRead, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
+        params.OnRead = std::bind(&MountedBuild::FileRead, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
 
         params.SectorSize = 512;
         params.SectorsPerAllocationUnit = 1; // sectors per cluster (in hardware terms)

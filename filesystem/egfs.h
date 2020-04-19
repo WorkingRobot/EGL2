@@ -1,7 +1,5 @@
 #pragma once
 
-#define EGFS_MAX_PATH 260
-
 #include "dirtree.h"
 
 #include <winfsp/winfsp.h>
@@ -10,9 +8,7 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
-struct EGFS_CALLBACKS {
-	std::function<void(PVOID Handle, PVOID Buffer, UINT64 offset, ULONG length, ULONG* bytesRead)> Read;
-};
+typedef std::function<void(PVOID Handle, PVOID Buffer, UINT64 offset, ULONG length, ULONG* bytesRead)> EGFS_READ_CALLBACK;
 
 struct EGFS_PARAMS {
 	WCHAR FileSystemName[16];
@@ -22,7 +18,7 @@ struct EGFS_PARAMS {
 	UINT64 VolumeFree;
 	PVOID Security;
 	SIZE_T SecuritySize;
-	EGFS_CALLBACKS Callbacks;
+	EGFS_READ_CALLBACK OnRead;
 
 	UINT16 SectorSize;
 	UINT16 SectorsPerAllocationUnit;
@@ -55,10 +51,10 @@ struct EGFS_FILE {
 	PVOID Context;
 
 	UINT64 FileSize;
-	UINT64 CreationTime;
-	UINT64 AccessTime;
-	UINT64 WriteTime;
-	UINT64 ChangeTime; // ???
+	UINT64 CreationTime; // File creation timestamp
+	UINT64 AccessTime;   // File data read timestamp
+	UINT64 WriteTime;    // File data change timestamp
+	UINT64 ChangeTime;   // Metadata change timestamp
 };
 
 class EGFS {
@@ -80,7 +76,7 @@ private:
 	RootTree<EGFS_FILE> Files;
 
 	FSP_FILE_SYSTEM* FileSystem;
-	EGFS_CALLBACKS Callbacks;
+	EGFS_READ_CALLBACK OnRead;
 
 	PVOID Security;
 	SIZE_T SecuritySize;
