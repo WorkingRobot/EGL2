@@ -1,6 +1,6 @@
 #include "symlink_workaround.h"
 
-#define DEVELOPER_MODE_REGKEY L"Software\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock"
+#define DEVELOPER_MODE_REGKEY   L"Software\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock"
 #define DEVELOPER_MODE_REGVALUE L"AllowDevelopmentWithoutDevLicense"
 
 #define WIN32_LEAN_AND_MEAN

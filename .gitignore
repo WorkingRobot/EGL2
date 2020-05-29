@@ -1,2 +1,5 @@
 out/
 .vs/
+
+cert.pfx
+cert.pwd

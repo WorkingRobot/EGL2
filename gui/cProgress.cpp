@@ -1,8 +1,8 @@
 #include "cProgress.h"
 
+#include <chrono>
 #include <wx/appprogress.h>
 
-#include <chrono>
 namespace ch = std::chrono;
 
 cProgress::cProgress(cMain* main, wxString taskName, cancel_flag& cancelFlag, float updateFreq, uint32_t maximum) : wxFrame(main, wxID_ANY, taskName + " - EGL2", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)) {
@@ -23,10 +23,10 @@ cProgress::cProgress(cMain* main, wxString taskName, cancel_flag& cancelFlag, fl
 
 	progressBar = new wxGauge(panel, wxID_ANY, maxValue, wxDefaultPosition, wxDefaultSize, wxGA_HORIZONTAL | wxGA_SMOOTH);
 
-	progressPercent = new wxStaticText(panel, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
-	progressTotal = new wxStaticText(panel, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
-	progressTimeElapsed = new wxStaticText(panel, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
-	progressTimeETA = new wxStaticText(panel, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
+	progressPercent = new wxStaticText(panel, wxID_ANY, "0.00%", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
+	progressTotal = new wxStaticText(panel, wxID_ANY, "0 / 0", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
+	progressTimeElapsed = new wxStaticText(panel, wxID_ANY, "Elapsed: 00:00:00", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
+	progressTimeETA = new wxStaticText(panel, wxID_ANY, "ETA: 00:00:00", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
 
 	progressCancelBtn = new wxButton(panel, wxID_ANY, "Cancel");
 	progressTaskbar = new wxAppProgressIndicator(this, maxValue);
@@ -84,22 +84,24 @@ inline void cProgress::Update(bool force) {
 		return;
 	}
 	lastUpdate = now;
-	progressBar->SetValue(value + 1);
-	progressBar->SetValue(value);
-	progressTaskbar->SetValue(value);
+	auto val = value.load();
+	SetMaximum((std::max)(val, maxValue));
+	progressBar->SetValue(val + 1);
+	progressBar->SetValue(val);
+	progressTaskbar->SetValue(val);
 
 	{
-		progressPercent->SetLabel(wxString::Format("%.2f%%", float(value) * 100 / maxValue));
-		progressTotal->SetLabel(wxString::Format("%u / %u", value.load(), maxValue));
+		progressPercent->SetLabel(wxString::Format("%.2f%%", float(val) * 100 / maxValue));
+		progressTotal->SetLabel(wxString::Format("%u / %u", val, maxValue));
 
 		auto elapsed = ch::duration_cast<ch::seconds>(now - startTime);
 		progressTimeElapsed->SetLabel("Elapsed: " + FormatTime(elapsed));
 
 		auto& timePoint = etaTimePoints.front();
-		auto eta = GetETA(now - timePoint.second, value - timePoint.first, maxValue - value);
+		auto eta = GetETA(now - timePoint.second, val - timePoint.first, maxValue - val);
 		progressTimeETA->SetLabel("ETA: " + FormatTime(eta));
 
-		etaTimePoints.push(std::make_pair(value.load(), now));
+		etaTimePoints.push(std::make_pair(val, now));
 		if (etaTimePoints.size() > queueSize) {
 			etaTimePoints.pop();
 		}

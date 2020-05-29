@@ -1,115 +1,168 @@
 #include "compression.h"
 
+#ifndef LOG_SECTION
+#define LOG_SECTION "Compressor"
+#endif
+
+#include "../Logger.h"
 #include "storage.h"
 
-#include <libdeflate.h>
-#include <lz4hc.h>
+Compressor::Compressor(uint32_t storageFlags) :
+	StorageFlags(storageFlags) {
+	switch (StorageFlags & StorageCompMethodMask)
+	{
+	case StorageDecompressed:
+	{
+		CompressFunc = std::make_pair<std::shared_ptr<char[]>, size_t>;
+		break;
+	}
+	case StorageZstd:
+	{
+		switch (StorageFlags & StorageCompLevelMask)
+		{
+		case StorageCompressFastest:
+			CLevel = -3;
+			break;
+		case StorageCompressFast:
+			CLevel = -1;
+			break;
+		case StorageCompressNormal:
+			CLevel = 1;
+			break;
+		case StorageCompressSlow:
+			CLevel = 3;
+			break;
+		case StorageCompressSlowest:
+			CLevel = 5;
+			break;
+		}
+		CCtx = std::make_unique<CtxManager<void*>>([]() { return ZSTD_createCCtx(); }, [](void* cctx) { ZSTD_freeCCtx((ZSTD_CCtx*)cctx); });
 
-bool ZlibDecompress(FILE* File, DECOMPRESS_ALLOCATOR Allocator) {
+		CompressFunc = [this](std::shared_ptr<char[]>& buffer, size_t buffer_size) {
+			auto outBuf = std::shared_ptr<char[]>(new char[ZSTD_COMPRESSBOUND(buffer_size)]);
+			size_t outSize;
+			{
+				std::unique_lock<std::mutex> lock;
+				auto& cctx = CCtx->GetCtx(lock);
+				outSize = ZSTD_compressCCtx((ZSTD_CCtx*)cctx, outBuf.get(), ZSTD_COMPRESSBOUND(buffer_size), buffer.get(), buffer_size, CLevel);
+			}
+			return std::make_pair(outBuf, outSize);
+		};
+		break;
+	}
+	case StorageLZ4:
+	{
+		switch (StorageFlags & StorageCompLevelMask)
+		{
+		case StorageCompressFastest:
+			CLevel = LZ4HC_CLEVEL_MIN;
+			break;
+		case StorageCompressFast:
+			CLevel = 6;
+			break;
+		case StorageCompressNormal:
+			CLevel = LZ4HC_CLEVEL_DEFAULT;
+			break;
+		case StorageCompressSlow:
+			CLevel = LZ4HC_CLEVEL_OPT_MIN;
+			break;
+		case StorageCompressSlowest:
+			CLevel = LZ4HC_CLEVEL_MAX;
+			break;
+		}
+		
+		CCtx = std::make_unique<CtxManager<void*>>([]() { return _aligned_malloc(LZ4_sizeofStateHC(), 8); }, &_aligned_free);
+
+		CompressFunc = [this](std::shared_ptr<char[]>& buffer, size_t buffer_size) {
+			auto outBuf = std::shared_ptr<char[]>(new char[LZ4_COMPRESSBOUND(buffer_size)]);
+			size_t outSize;
+			{
+				std::unique_lock<std::mutex> lock;
+				auto& cctx = CCtx->GetCtx(lock);
+				outSize = LZ4_compress_HC_extStateHC(cctx, buffer.get(), outBuf.get(), buffer_size, LZ4_COMPRESSBOUND(buffer_size), CLevel);
+			}
+			return std::make_pair(outBuf, outSize);
+		};
+		break;
+	}
+	}
+
+	ZlibDCtx = std::make_unique<CtxManager<libdeflate_decompressor*>>(&libdeflate_alloc_decompressor, &libdeflate_free_decompressor);
+	ZstdDCtx = std::make_unique<CtxManager<ZSTD_DCtx*>>([]() {return ZSTD_createDCtx(); }, [](ZSTD_DCtx* ctx) { ZSTD_freeDCtx(ctx); });
+}
+
+Compressor::~Compressor() {
+
+}
+
+Compressor::buffer_value Compressor::StorageCompress(std::shared_ptr<char[]> buffer, size_t buffer_size)
+{
+	return CompressFunc(buffer, buffer_size);
+}
+
+Compressor::buffer_value Compressor::ZlibDecompress(FILE* File, size_t& inBufSize)
+{
 	uint32_t uncompressedSize;
 	fread(&uncompressedSize, sizeof(uint32_t), 1, File);
 
 	auto pos = ftell(File);
 	fseek(File, 0, SEEK_END);
-	auto inBufSize = ftell(File) - pos;
+	inBufSize = ftell(File) - pos;
 	fseek(File, pos, SEEK_SET);
 
-	char* inBuffer = new char[inBufSize];
-	fread(inBuffer, 1, inBufSize, File);
+	auto inBuffer = std::make_unique<char[]>(inBufSize);
+	fread(inBuffer.get(), 1, inBufSize, File);
 
-	auto decompressor = libdeflate_alloc_decompressor();
+	auto outBuffer = std::shared_ptr<char[]>(new char[uncompressedSize]);
 
-	auto& outBuffer = Allocator(uncompressedSize);
-	libdeflate_zlib_decompress(decompressor, inBuffer, inBufSize, outBuffer.get(), uncompressedSize, NULL);
+	{
+		std::unique_lock<std::mutex> lock;
+		auto& dctx = ZlibDCtx->GetCtx(lock);
+		libdeflate_zlib_decompress(dctx, inBuffer.get(), inBufSize, outBuffer.get(), uncompressedSize, NULL);
+	}
 
-	libdeflate_free_decompressor(decompressor);
-	delete[] inBuffer;
-	return true;
+	return std::make_pair(outBuffer, uncompressedSize);
 }
 
-bool LZ4Decompress(FILE* File, DECOMPRESS_ALLOCATOR Allocator) {
+Compressor::buffer_value Compressor::ZstdDecompress(FILE* File, size_t& inBufSize)
+{
 	uint32_t uncompressedSize;
 	fread(&uncompressedSize, sizeof(uint32_t), 1, File);
 
 	auto pos = ftell(File);
 	fseek(File, 0, SEEK_END);
-	auto inBufSize = ftell(File) - pos;
+	inBufSize = ftell(File) - pos;
 	fseek(File, pos, SEEK_SET);
 
-	char* inBuffer = new char[inBufSize];
-	fread(inBuffer, 1, inBufSize, File);
+	auto inBuffer = std::make_unique<char[]>(inBufSize);
+	fread(inBuffer.get(), 1, inBufSize, File);
 
-	auto& outBuffer = Allocator(uncompressedSize);
-	LZ4_decompress_fast(inBuffer, outBuffer.get(), uncompressedSize);
+	auto outBuffer = std::shared_ptr<char[]>(new char[uncompressedSize]);
 
-	delete[] inBuffer;
-	return true;
+	{
+		std::unique_lock<std::mutex> lock;
+		auto& dctx = ZstdDCtx->GetCtx(lock);
+		ZSTD_decompressDCtx(dctx, outBuffer.get(), uncompressedSize, inBuffer.get(), inBufSize);
+	}
+
+	return std::make_pair(outBuffer, uncompressedSize);
 }
 
-bool ZlibCompress(uint32_t Flags, const char* Buffer, uint32_t BufferSize, char** POutBuffer, uint32_t* POutBufferSize) {
-	int compression_level;
-	if (Flags & StorageCompressFastest) {
-		compression_level = 1;
-	}
-	else if (Flags & StorageCompressFast) {
-		compression_level = 4;
-	}
-	else if (Flags & StorageCompressNormal) {
-		compression_level = 6;
-	}
-	else if (Flags & StorageCompressSlow) {
-		compression_level = 9;
-	}
-	else if (Flags & StorageCompressSlowest) {
-		compression_level = 12;
-	}
-	else {
-		return false;
-	}
+Compressor::buffer_value Compressor::LZ4Decompress(FILE* File, size_t& inBufSize)
+{
+	uint32_t uncompressedSize;
+	fread(&uncompressedSize, sizeof(uint32_t), 1, File);
 
-	auto compressor = libdeflate_alloc_compressor(compression_level);
+	auto pos = ftell(File);
+	fseek(File, 0, SEEK_END);
+	inBufSize = ftell(File) - pos;
+	fseek(File, pos, SEEK_SET);
 
-	uint32_t outBufSize = libdeflate_zlib_compress_bound(compressor, BufferSize);
-	char* outBuffer = new char[outBufSize];
+	auto inBuffer = std::make_unique<char[]>(inBufSize);
+	fread(inBuffer.get(), 1, inBufSize, File);
 
-	uint32_t compressedSize = libdeflate_zlib_compress(compressor, Buffer, BufferSize, outBuffer, outBufSize);
+	auto outBuffer = std::shared_ptr<char[]>(new char[uncompressedSize]);
+	LZ4_decompress_safe(inBuffer.get(), outBuffer.get(), inBufSize, uncompressedSize);
 
-	*POutBuffer = outBuffer;
-	*POutBufferSize = compressedSize;
-
-	libdeflate_free_compressor(compressor);
-}
-
-bool LZ4Compress(uint32_t Flags, const char* Buffer, uint32_t BufferSize, char** POutBuffer, uint32_t* POutBufferSize) {
-	int compression_level;
-	if (Flags & StorageCompressFastest) {
-		compression_level = LZ4HC_CLEVEL_MIN;
-	}
-	else if (Flags & StorageCompressFast) {
-		compression_level = 6;
-	}
-	else if (Flags & StorageCompressNormal) {
-		compression_level = LZ4HC_CLEVEL_DEFAULT;
-	}
-	else if (Flags & StorageCompressSlow) {
-		compression_level = LZ4HC_CLEVEL_OPT_MIN; // uses "HC" at this point
-	}
-	else if (Flags & StorageCompressSlowest) {
-		compression_level = LZ4HC_CLEVEL_MAX;
-	}
-	else {
-		return false;
-	}
-
-	uint32_t outBufSize = LZ4_COMPRESSBOUND(BufferSize);
-	char* outBuffer = new char[outBufSize];
-	
-	uint32_t compressedSize = LZ4_compress_HC(Buffer, outBuffer, BufferSize, outBufSize, compression_level);
-
-	*POutBuffer = outBuffer;
-	*POutBufferSize = compressedSize;
-}
-
-void DeleteCompressBuffer(char* OutBuffer) {
-	delete[] OutBuffer;
+	return std::make_pair(outBuffer, uncompressedSize);
 }

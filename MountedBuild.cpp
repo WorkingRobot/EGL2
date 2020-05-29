@@ -1,36 +1,105 @@
 #include "MountedBuild.h"
 
-#include "containers/iterable_queue.h"
-#include "containers/semaphore.h"
-#include "containers/file_sha.h"
+#define GAME_DIR   "workaround"
+#define LOG_FLAGS  0 // can also be -1 for all flags
+#define MB_SDDL_OWNER "S-1-5-18" // Local System
+#define MB_SDDL_DATA  "P(A;ID;FRFX;;;WD)" // Protected from inheritance, allows it and it's children to give read and execure access to everyone
+#define SDDL_ROOT  L"D:" MB_SDDL_DATA
+#define SDDL_FILE  L"O:" MB_SDDL_OWNER "G:" MB_SDDL_OWNER "D:" MB_SDDL_DATA
 
+#ifndef LOG_SECTION
+#define LOG_SECTION "MountedBuild"
+#endif
+
+#include "Logger.h"
+#include "Stats.h"
+#include "containers/file_sha.h"
+#include "web/manifest/manifest.h"
+
+#include <algorithm>
+#include <deque>
+#include <sddl.h>
 #include <set>
 #include <unordered_set>
-#include <sddl.h>
 
-#define fail(format, ...)               FspServiceLog(EVENTLOG_ERROR_TYPE, format, ##__VA_ARGS__)
+MountedBuild::MountedBuild(Manifest manifest, fs::path mountDir, fs::path cachePath, uint32_t storageFlags, uint32_t memoryPoolCapacity) :
+    Build(manifest),
+    MountDir(mountDir),
+    CacheDir(cachePath),
+    StorageData(storageFlags, memoryPoolCapacity, CacheDir, Build.CloudDir)
+{
+    LOG_DEBUG("new (v: %s, mount: %s, cache: %s)", Build.BuildVersion.c_str(), MountDir.string().c_str(), CacheDir.string().c_str());
 
-#define SDDL_OWNER "S-1-5-18" // Local System
-#define SDDL_DATA  "P(A;ID;FRFX;;;WD)" // Protected from inheritance, allows it and it's children to give read and execure access to everyone
-#define LOG_FLAGS  0 // can also be -1 for all flags
+    LOG_DEBUG("creating params");
+    {
+        PVOID securityDescriptor;
+        ULONG securityDescriptorSize;
+        if (!ConvertStringSecurityDescriptorToSecurityDescriptor(SDDL_FILE, SDDL_REVISION_1, &securityDescriptor, &securityDescriptorSize)) {
+            LOG_ERROR("invalid sddl (%08x)", FspNtStatusFromWin32(GetLastError()));
+        }
 
-#define SDDL_ROOT  "D:" SDDL_DATA
-#define SDDL_MEMFS "O:" SDDL_OWNER "G:" SDDL_OWNER "D:" SDDL_DATA
+        EGFS_PARAMS params;
 
-MountedBuild::MountedBuild(MANIFEST* manifest, fs::path mountDir, fs::path cachePath, ErrorHandler error) {
-    this->Manifest = manifest;
-    this->MountDir = mountDir;
-    this->CacheDir = cachePath;
-    this->Error = error;
-    this->Storage = nullptr;
-    this->Egfs = nullptr;
+        wcscpy_s(params.FileSystemName, L"EGFS");
+        params.VolumePrefix[0] = '\0';
+        wcscpy_s(params.VolumeLabel, L"EGL2");
+        params.VolumeTotal = Build.GetInstallSize();
+        params.VolumeFree = params.VolumeTotal - Build.GetDownloadSize();
+        params.Security = securityDescriptor;
+        params.SecuritySize = securityDescriptorSize;
+
+        params.OnRead = [this](PVOID Handle, PVOID Buffer, UINT64 offset, ULONG length, ULONG* bytesRead) {
+            FileRead(Handle, Buffer, offset, length, bytesRead);
+        };
+
+        params.SectorSize = 512;
+        params.SectorsPerAllocationUnit = 1; // sectors per cluster (in hardware terms)
+        params.VolumeCreationTime = 0;
+        params.VolumeSerialNumber = 0;
+        params.FileInfoTimeout = INFINITE; // https://github.com/billziss-gh/winfsp/issues/19#issuecomment-289853591
+        params.CaseSensitiveSearch = true;
+        params.CasePreservedNames = true;
+        params.UnicodeOnDisk = true;
+        params.PersistentAcls = true;
+        params.ReparsePoints = true;
+        params.ReparsePointsAccessCheck = false;
+        params.PostCleanupWhenModifiedOnly = true;
+        params.FlushAndPurgeOnCleanup = false;
+        params.AllowOpenInKernelMode = true;
+
+        params.LogFlags = 0; // -1 enables all (slowdowns imminent due to console spam, though)
+
+        NTSTATUS Result;
+        Egfs = std::make_unique<EGFS>(&params, Result);
+        if (!NT_SUCCESS(Result)) {
+            LOG_ERROR("could not create egfs (%08x)", Result);
+            return;
+        }
+        LocalFree(securityDescriptor);
+    }
+
+    LOG_DEBUG("adding files");
+    for (auto& file : Build.FileManifestList) {
+        Egfs->AddFile(file.FileName, &file, file.GetFileSize());
+    }
+
+    LOG_DEBUG("setting mount point");
+    {
+        PVOID rootSecurity;
+        if (!ConvertStringSecurityDescriptorToSecurityDescriptor(SDDL_ROOT, SDDL_REVISION_1, &rootSecurity, NULL)) {
+            LOG_ERROR("invalid root sddl (%08x)", FspNtStatusFromWin32(GetLastError()));
+            return;
+        }
+        Egfs->SetMountPoint(MountDir.native().c_str(), rootSecurity);
+        LocalFree(rootSecurity);
+    }
+
+    LOG_DEBUG("starting");
+    Egfs->Start();
 }
 
 MountedBuild::~MountedBuild() {
-    Unmount();
-    if (Storage) {
-        StorageDelete(Storage);
-    }
+
 }
 
 // 0: valid
@@ -47,9 +116,9 @@ inline int ValidChunkFile(fs::path& CacheDir, fs::path ChunkPath) {
     return (name.size() == 2 && isxdigit(name[0]) && isxdigit(name[1])) ? 0 : 1;
 }
 
-bool MountedBuild::SetupCacheDirectory() {
+bool MountedBuild::SetupCacheDirectory(fs::path CacheDir) {
     if (!fs::is_directory(CacheDir) && !fs::create_directories(CacheDir)) {
-        LogError("can't create cachedir %s\n", CacheDir.string().c_str());
+        LOG_ERROR("can't create cachedir %s", CacheDir.string().c_str());
         return false;
     }
 
@@ -58,32 +127,47 @@ bool MountedBuild::SetupCacheDirectory() {
         sprintf(cachePartFolder, "%02X", i);
         fs::create_directory(CacheDir / cachePartFolder);
     }
+
+    auto oldGameDir = CacheDir / "game";
+    if (fs::is_directory(oldGameDir)) {
+        LOG_INFO("Removing old game folder %s", oldGameDir.string().c_str());
+        std::error_code ec;
+        for (auto& f : fs::recursive_directory_iterator(oldGameDir)) {
+            fs::permissions(f, fs::perms::_All_write, ec);
+            if (ec) {
+                LOG_INFO(f.path().string().c_str());
+                LOG_ERROR(ec.message().c_str());
+            }
+        }
+        fs::remove_all(oldGameDir, ec);
+        if (ec) {
+            LOG_ERROR("Could not remove old game folder: %s", ec.message().c_str());
+        }
+    }
     return true;
 }
 
-void inline PreloadFile(STORAGE* Storage, MANIFEST_FILE* File, uint32_t ThreadCount, cancel_flag& cancelFlag) {
-    MANIFEST_CHUNK_PART* ChunkParts;
-    uint32_t ChunkCount;
-    uint16_t ChunkStride;
-    ManifestFileGetChunks(File, &ChunkParts, &ChunkCount, &ChunkStride);
-
-    iterable_queue<std::thread> threads;
-    for (int i = 0, n = 0; i < ChunkCount * ChunkStride && !cancelFlag.cancelled(); i += ChunkStride) {
-        auto Chunk = ManifestFileChunkGetChunk((MANIFEST_CHUNK_PART*)((char*)ChunkParts + i));
-        if (StorageChunkDownloaded(Storage, Chunk)) {
+void MountedBuild::PreloadFile(File& File, uint32_t ThreadCount, cancel_flag& cancelFlag) {
+    std::deque<std::thread> threads;
+    int n = 0;
+    for (auto& chunkPart : File.ChunkParts) {
+        if (cancelFlag.cancelled()) {
+            break;
+        }
+        if (StorageData.IsChunkDownloaded(chunkPart)) {
             continue;
         }
 
         // cheap semaphore, keeps thread count low instead of having 81k threads pile up
         while (threads.size() >= ThreadCount) {
             threads.front().join();
-            threads.pop();
+            threads.pop_front();
         }
 
-        threads.push(std::thread(StorageDownloadChunk, Storage, Chunk, [&n, &ChunkCount](const char* buf, uint32_t bufSize)
-        {
-            printf("\r%d downloaded / %d total (%.2f%%)", ++n, ChunkCount, float(n * 100) / ChunkCount);
-        }));
+        
+        threads.emplace_back([&, this]() {
+            StorageData.GetChunkPart(chunkPart);
+        });
     }
 
     if (cancelFlag.cancelled()) {
@@ -96,16 +180,14 @@ void inline PreloadFile(STORAGE* Storage, MANIFEST_FILE* File, uint32_t ThreadCo
             thread.join();
         }
     }
-
-    printf("\r%d downloaded / %d total (%.2f%%)\n", ChunkCount, ChunkCount, float(100));
 }
 
-bool inline CompareFile(MANIFEST_FILE* File, fs::path FilePath) {
+bool inline CompareFile(File& File, fs::path FilePath) {
     if (fs::status(FilePath).type() != fs::file_type::regular) {
         return false;
     }
 
-    if (fs::file_size(FilePath) != ManifestFileGetFileSize(File)) {
+    if (fs::file_size(FilePath) != File.GetFileSize()) {
         return false;
     }
 
@@ -114,43 +196,36 @@ bool inline CompareFile(MANIFEST_FILE* File, fs::path FilePath) {
         return false;
     }
 
-    return !memcmp(FileSha, ManifestFileGetSha1(File), 20);
+    return !memcmp(FileSha, File.ShaHash, 20);
 }
 
-bool MountedBuild::SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount, EnforceSymlinkCreationHandler enforceSymlinkCreation) {
-    auto gameDir = CacheDir / "game";
+bool MountedBuild::SetupGameDirectory(uint32_t threadCount) {
+    auto gameDir = CacheDir / GAME_DIR;
 
     if (!fs::is_directory(gameDir) && !fs::create_directories(gameDir)) {
-        LogError("can't create gamedir\n");
+        LOG_ERROR("can't create gamedir");
         return false;
     }
 
     bool symlinkCreationEnforced = false;
-    MANIFEST_FILE* Files;
-    uint32_t FileCount;
-    uint16_t FileStride;
-    char FilenameBuffer[128];
-    ManifestGetFiles(Manifest, &Files, &FileCount, &FileStride);
-    setMax(FileCount);
-    for (int i = 0; i < FileCount * FileStride && !cancelFlag.cancelled(); i += FileStride) {
-        auto File = (MANIFEST_FILE*)((char*)Files + i);
-        ManifestFileGetName(File, FilenameBuffer);
-        fs::path filePath = fs::path(FilenameBuffer);
+    cancel_flag flag;
+    for (auto& file : Build.FileManifestList) {
+        fs::path filePath = file.FileName;
         fs::path folderPath = filePath.parent_path();
 
         if (!fs::create_directories(gameDir / folderPath) && !fs::is_directory(gameDir / folderPath)) {
-            LogError("can't create %s\n", (gameDir / folderPath).string().c_str());
+            LOG_ERROR("can't create %s\n", (gameDir / folderPath).string().c_str());
             goto continueFileLoop;
         }
         do {
             if (folderPath.filename() == "Binaries") {
-                if (!CompareFile(File, gameDir / filePath)) {
-                    PreloadFile(Storage, File, threadCount, cancelFlag);
+                if (!CompareFile(file, gameDir / filePath)) {
+                    PreloadFile(file, threadCount, flag);
                     if (fs::status(gameDir / filePath).type() == fs::file_type::regular) {
                         fs::permissions(gameDir / filePath, fs::perms::_All_write, fs::perm_options::add); // copying over a file from the drive gives it the read-only attribute, this overrides that
                     }
                     if (!fs::copy_file(MountDir / filePath, gameDir / filePath, fs::copy_options::overwrite_existing)) {
-                        LogError("failed to copy %s\n", filePath.string().c_str());
+                        LOG_ERROR("failed to copy %s", filePath.string().c_str());
                     }
                 }
                 goto continueFileLoop;
@@ -158,72 +233,62 @@ bool MountedBuild::SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncr
             folderPath = folderPath.parent_path();
         } while (folderPath != folderPath.root_path());
 
-        if (!fs::is_symlink(gameDir / filePath)) {
-            if (!symlinkCreationEnforced) {
-                if (!enforceSymlinkCreation()) {
-                    return false;
-                }
-                symlinkCreationEnforced = true;
+        if (fs::is_symlink(gameDir / filePath)) {
+            if (fs::read_symlink(gameDir / filePath) != MountDir / filePath) {
+                fs::remove(gameDir / filePath); // remove if exists and is invalid
+                fs::create_symlink(MountDir / filePath, gameDir / filePath);
             }
+        }
+        else {
             fs::create_symlink(MountDir / filePath, gameDir / filePath);
         }
     continueFileLoop:
-        progress();
-    }
-    return true;
-}
-
-bool MountedBuild::StartStorage(uint32_t storageFlags) {
-    if (Storage) {
-        return true;
-    }
-    char CloudDirHost[64];
-    char CloudDirPath[64];
-    ManifestGetCloudDir(Manifest, CloudDirHost, CloudDirPath);
-    if (!StorageCreate(storageFlags, CacheDir.native().c_str(), CloudDirHost, CloudDirPath, &Storage)) {
-        LogError("cannot create storage");
-        return false;
+        ;
     }
     return true;
 }
 
 bool MountedBuild::PreloadAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount) {
-    std::shared_ptr<MANIFEST_CHUNK>* ChunkList;
-    uint32_t ChunkCount;
-    ManifestGetChunks(Manifest, &ChunkList, &ChunkCount);
-    LogError("set chunk count to %u", ChunkCount);
-    setMax(ChunkCount);
+    LOG_DEBUG("preloading");
+    setMax(GetMissingChunkCount());
 
-    iterable_queue<std::thread> threads;
+    std::deque<std::thread> threads;
 
-    for (auto Chunk = ChunkList; Chunk != ChunkList + ChunkCount && !cancelFlag.cancelled(); Chunk++) {
-        if (StorageChunkDownloaded(Storage, Chunk->get())) {
+    int n = 0;
+    for (auto& chunk : Build.ChunkManifestList) {
+        if (cancelFlag.cancelled()) {
+            break;
+        }
+        if (StorageData.IsChunkDownloaded(chunk)) {
             //LogError("already downloaded", ChunkCount);
-            progress();
+            //progress();
             continue;
         }
 
         // cheap semaphore, keeps thread count low instead of having 81k threads pile up
         while (threads.size() >= threadCount) {
             threads.front().join();
-            threads.pop();
+            threads.pop_front();
         }
 
-        threads.push(std::thread(StorageDownloadChunk, Storage, Chunk->get(), std::bind(progress)));
+        
+        threads.emplace_back([&, this]() {
+            StorageData.GetChunk(chunk);
+            progress();
+        });
     }
 
     if (cancelFlag.cancelled()) {
         for (auto& thread : threads) {
             thread.detach();
-            progress();
         }
     }
     else {
         for (auto& thread : threads) {
             thread.join();
-            progress();
         }
     }
+    LOG_DEBUG("preloaded");
     return true;
 }
 
@@ -231,26 +296,18 @@ bool MountedBuild::PreloadAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHa
 #define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
 auto guidHash = [](const char* n) { return (*((uint64_t*)n)) ^ (*(((uint64_t*)n) + 1)); };
 auto guidEqual = [](const char* a, const char* b) {return !memcmp(a, b, 16); };
-void MountedBuild::PurgeUnusedChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag) {
-    std::shared_ptr<MANIFEST_CHUNK>* ChunkList;
-    uint32_t ChunkCount;
-    ManifestGetChunks(Manifest, &ChunkList, &ChunkCount);
-
+void MountedBuild::PurgeUnusedChunks() {
+    LOG_DEBUG("purging");
     std::unordered_set<char*, decltype(guidHash), decltype(guidEqual)> ManifestGuids;
-    ManifestGuids.reserve(ChunkCount);
-    for (auto Chunk = ChunkList; Chunk != ChunkList + ChunkCount; Chunk++) {
-        ManifestGuids.insert(ManifestChunkGetGuid(Chunk->get()));
+    ManifestGuids.reserve(Build.ChunkManifestList.size());
+    for (auto& chunk : Build.ChunkManifestList) {
+        ManifestGuids.insert(chunk->Guid);
     }
-
-    setMax(std::count_if(fs::recursive_directory_iterator(CacheDir), fs::recursive_directory_iterator(), [this](const fs::directory_entry& f) { return f.is_regular_file() && ValidChunkFile(CacheDir, f.path()) == 0; }));
 
     char guidBuffer[16];
     char guidBuffer2[16];
     auto iterator = fs::recursive_directory_iterator(CacheDir);
     for (auto& p : iterator) {
-        if (cancelFlag.cancelled()) {
-            break;
-        }
         if (!p.is_regular_file()) {
             continue;
         }
@@ -271,20 +328,20 @@ void MountedBuild::PurgeUnusedChunks(ProgressSetMaxHandler setMax, ProgressIncrH
                 fs::remove(p);
             }
         }
-        progress();
     }
+    LOG_DEBUG("purged");
 }
 
 void MountedBuild::VerifyAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount) {
-    std::shared_ptr<MANIFEST_CHUNK>* ChunkList;
-    uint32_t ChunkCount;
-    ManifestGetChunks(Manifest, &ChunkList, &ChunkCount);
-    setMax((std::min)(ChunkCount, (uint32_t)std::count_if(fs::recursive_directory_iterator(CacheDir), fs::recursive_directory_iterator(), [this](const fs::directory_entry& f) { return f.is_regular_file() && ValidChunkFile(CacheDir, f.path()) == 0; })));
+    setMax((std::min)(Build.ChunkManifestList.size(), (size_t)std::count_if(fs::recursive_directory_iterator(CacheDir), fs::recursive_directory_iterator(), [this](const fs::directory_entry& f) { return f.is_regular_file() && ValidChunkFile(CacheDir, f.path()) == 0; })));
 
-    iterable_queue<std::thread> threads;
+    std::deque<std::thread> threads;
 
-    for (auto Chunk = ChunkList; Chunk != ChunkList + ChunkCount && !cancelFlag.cancelled(); Chunk++) {
-        if (!StorageChunkDownloaded(Storage, Chunk->get())) {
+    for (auto& chunk : Build.ChunkManifestList) {
+        if (cancelFlag.cancelled()) {
+            break;
+        }
+        if (!StorageData.IsChunkDownloaded(chunk)) {
             continue;
         }
 
@@ -292,10 +349,16 @@ void MountedBuild::VerifyAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHan
         while (threads.size() >= threadCount) {
             threads.front().join();
             progress();
-            threads.pop();
+            threads.pop_front();
         }
 
-        threads.push(std::thread(StorageVerifyChunk, Storage, Chunk->get()));
+        threads.emplace_back(std::thread([=, this]() {
+            if (!StorageData.VerifyChunk(chunk)) {
+                LOG_WARN("Invalid hash");
+                StorageData.DeleteChunk(chunk);
+                StorageData.GetChunk(chunk);
+            }
+        }));
     }
 
     if (cancelFlag.cancelled()) {
@@ -311,13 +374,14 @@ void MountedBuild::VerifyAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHan
     }
 }
 
+uint32_t MountedBuild::GetMissingChunkCount()
+{
+   return std::count_if(Build.ChunkManifestList.begin(), Build.ChunkManifestList.end(), [&](auto& a) { return !StorageData.IsChunkDownloaded(a); });
+}
+
 void MountedBuild::LaunchGame(const char* additionalArgs) {
-    char ExeBuf[MAX_PATH];
-    char CmdBuf[512];
-    ManifestGetLaunchInfo(Manifest, ExeBuf, CmdBuf);
-    strcat(CmdBuf, " ");
-    strcat(CmdBuf, additionalArgs);
-    fs::path exePath = CacheDir / "game" / ExeBuf;
+    std::string CmdBuf = Build.LaunchCommand + " " + additionalArgs;
+    fs::path exePath = CacheDir / GAME_DIR / Build.LaunchExe;
 
     PROCESS_INFORMATION pi;
     STARTUPINFOA si;
@@ -326,152 +390,43 @@ void MountedBuild::LaunchGame(const char* additionalArgs) {
     memset(&si, 0, sizeof(si));
     si.cb = sizeof(si);
 
-    CreateProcessA(exePath.string().c_str(), CmdBuf, NULL, NULL, FALSE, DETACHED_PROCESS, NULL, exePath.parent_path().string().c_str(), &si, &pi);
+    CreateProcessA(exePath.string().c_str(), (LPSTR)CmdBuf.c_str(), NULL, NULL, FALSE, DETACHED_PROCESS, NULL, exePath.parent_path().string().c_str(), &si, &pi);
 
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 }
 
-bool MountedBuild::Mount() {
-    if (Mounted()) {
-        return true;
-    }
-
-    FspDebugLogSetHandle(GetStdHandle(STD_OUTPUT_HANDLE));
-
-    {
-        PVOID securityDescriptor;
-        ULONG securityDescriptorSize;
-        if (!ConvertStringSecurityDescriptorToSecurityDescriptorA(SDDL_MEMFS, SDDL_REVISION_1, &securityDescriptor, &securityDescriptorSize)) {
-            fail(L"invalid sddl: %08x", FspNtStatusFromWin32(GetLastError()));
-            return false;
-        }
-
-        auto downloadSize = ManifestDownloadSize(Manifest);
-        auto installSize = ManifestInstallSize(Manifest);
-        EGFS_PARAMS params;
-
-        wcscpy_s(params.FileSystemName, L"EGFS");
-        params.VolumePrefix[0] = 0;
-        // VolumePrefix stays 0 for now, maybe change it later
-        wcscpy_s(params.VolumeLabel, L"EGL2");
-        params.VolumeTotal = installSize;
-        params.VolumeFree = installSize - downloadSize;
-        params.Security = securityDescriptor;
-        params.SecuritySize = securityDescriptorSize;
-
-        params.OnRead = std::bind(&MountedBuild::FileRead, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
-
-        params.SectorSize = 512;
-        params.SectorsPerAllocationUnit = 1; // sectors per cluster (in hardware terms)
-        params.VolumeCreationTime = 0;
-        params.VolumeSerialNumber = 0;
-        params.FileInfoTimeout = INFINITE; // https://github.com/billziss-gh/winfsp/issues/19#issuecomment-289853591
-        params.CaseSensitiveSearch = true;
-        params.CasePreservedNames = true;
-        params.UnicodeOnDisk = true;
-        params.PersistentAcls = true;
-        params.ReparsePoints = true;
-        params.ReparsePointsAccessCheck = false;
-        params.PostCleanupWhenModifiedOnly = true;
-        params.FlushAndPurgeOnCleanup = false;
-        params.AllowOpenInKernelMode = true;
-
-        params.LogFlags = 0; // -1 enables all (slowdowns imminent due to console spam, though)
-
-        NTSTATUS Result;
-        Egfs = new EGFS(&params, Result);
-        if (!NT_SUCCESS(Result)) {
-            fail(L"could not create eglfs: %08x", Result);
-            return false;
-        }
-        LocalFree(securityDescriptor);
-    }
-
-    {
-        MANIFEST_FILE* Files;
-        uint32_t FileCount;
-        uint16_t FileStride;
-        char FilenameBuffer[128];
-        ManifestGetFiles(Manifest, &Files, &FileCount, &FileStride);
-        for (int i = 0; i < FileCount * FileStride; i += FileStride) {
-            auto File = (MANIFEST_FILE*)((char*)Files + i);
-            ManifestFileGetName(File, FilenameBuffer);
-            Egfs->AddFile(fs::path(FilenameBuffer), File, ManifestFileGetFileSize(File));
-        }
-    }
-
-    {
-        PVOID rootSecurity;
-        if (!ConvertStringSecurityDescriptorToSecurityDescriptorA(SDDL_ROOT, SDDL_REVISION_1, &rootSecurity, NULL)) {
-            fail(L"invalid root sddl: %08x", FspNtStatusFromWin32(GetLastError()));
-            return false;
-        }
-        Egfs->SetMountPoint(MountDir.native().c_str(), rootSecurity);
-        LocalFree(rootSecurity);
-    }
-
-    Egfs->Start();
-    return true;
-}
-
-bool MountedBuild::Unmount() {
-    if (!Mounted()) {
-        return true;
-    }
-
-    delete Egfs;
-    Egfs = nullptr;
-
-    return true;
-}
-
-bool MountedBuild::Mounted() {
-    return Egfs;
-}
-
-void MountedBuild::LogError(const char* format, ...)
-{
-    va_list argp;
-    va_start(argp, format);
-    char* buf = new char[snprintf(nullptr, 0, format, argp) + 1];
-    vsprintf(buf, format, argp);
-    va_end(argp);
-    Error(buf);
-    delete[] buf;
-}
-
 void MountedBuild::FileRead(PVOID Handle, PVOID Buffer, UINT64 offset, ULONG length, ULONG* bytesRead) {
-    auto File = (MANIFEST_FILE*)Handle;
+    auto startTime = std::chrono::steady_clock::now();
+
+    auto file = (File*)Handle;
+    //LOG_DEBUG("Reading %s, at %d: %d", file->FileName.c_str(), offset, length);
     uint32_t ChunkStartIndex, ChunkStartOffset;
-    if (ManifestFileGetChunkIndex(File, offset, &ChunkStartIndex, &ChunkStartOffset)) {
-        MANIFEST_CHUNK_PART* ChunkParts;
-        uint32_t ChunkPartCount, BytesRead = 0;
-        uint16_t StrideSize;
-        ManifestFileGetChunks(File, &ChunkParts, &ChunkPartCount, &StrideSize);
-        for (int i = ChunkStartIndex * StrideSize; i < ChunkPartCount * StrideSize; i += StrideSize) {
-            auto chunkPart = (MANIFEST_CHUNK_PART*)((char*)ChunkParts + i);
-            uint32_t ChunkOffset, ChunkSize;
-            ManifestFileChunkGetData(chunkPart, &ChunkOffset, &ChunkSize);
-            char* ChunkBuffer = new char[ChunkSize];
-            StorageDownloadChunkPart(Storage, chunkPart, ChunkBuffer);
-            if (((int64_t)length - (int64_t)BytesRead) > (int64_t)ChunkSize - (int64_t)ChunkStartOffset) { // copy the entire buffer over
-                memcpy((char*)Buffer + BytesRead, ChunkBuffer + ChunkStartOffset, ChunkSize - ChunkStartOffset);
-                BytesRead += ChunkSize - ChunkStartOffset;
+    if (file->GetChunkIndex(offset, ChunkStartIndex, ChunkStartOffset)) {
+        uint32_t BytesRead = 0;
+        for (auto chunkPart = file->ChunkParts.begin() + ChunkStartIndex; chunkPart != file->ChunkParts.end(); chunkPart++) {
+            auto chunkBuffer = StorageData.GetChunkPart(*chunkPart);
+            if (((int64_t)length - (int64_t)BytesRead) > (int64_t)chunkPart->Size - (int64_t)ChunkStartOffset) { // copy the entire buffer over
+                //LOG_DEBUG("Copying to %d, size %d", BytesRead, chunkPart->Size - ChunkStartOffset);
+                memcpy((char*)Buffer + BytesRead, chunkBuffer.get() + ChunkStartOffset, chunkPart->Size - ChunkStartOffset);
+                BytesRead += chunkPart->Size - ChunkStartOffset;
             }
             else { // copy what it needs to fill up the rest
-                memcpy((char*)Buffer + BytesRead, ChunkBuffer + ChunkStartOffset, length - BytesRead);
+                //LOG_DEBUG("Copying to %d, size %d", BytesRead, length - BytesRead);
+                memcpy((char*)Buffer + BytesRead, chunkBuffer.get() + ChunkStartOffset, length - BytesRead);
                 BytesRead += (int64_t)length - (int64_t)BytesRead;
-                delete[] ChunkBuffer;
-                *bytesRead = BytesRead;
-                return;
+                break;
             }
-            delete[] ChunkBuffer;
             ChunkStartOffset = 0;
         }
+        Stats::ProvideCount.fetch_add(BytesRead, std::memory_order_relaxed);
         *bytesRead = BytesRead;
     }
     else {
         *bytesRead = 0;
     }
+
+    auto endTime = std::chrono::steady_clock::now();
+    Stats::LatOpCount.fetch_add(1, std::memory_order_relaxed);
+    Stats::LatNsCount.fetch_add((endTime - startTime).count(), std::memory_order_relaxed);
 }

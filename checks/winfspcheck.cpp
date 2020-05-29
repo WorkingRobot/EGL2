@@ -1,15 +1,14 @@
 #include "winfspcheck.h"
 
+#include <filesystem>
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <ShlObj_core.h>
 
-#include <filesystem>
 namespace fs = std::filesystem;
 
-bool alreadyLoaded = false;
-
 WinFspCheckResult LoadWinFsp() {
+    static bool alreadyLoaded = false;
     if (alreadyLoaded) {
         return WinFspCheckResult::LOADED;
     }

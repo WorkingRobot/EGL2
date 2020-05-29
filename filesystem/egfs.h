@@ -2,10 +2,11 @@
 
 #include "dirtree.h"
 
+#include <filesystem>
+#include <functional>
+#include <memory>
 #include <winfsp/winfsp.h>
 
-#include <functional>
-#include <filesystem>
 namespace fs = std::filesystem;
 
 typedef std::function<void(PVOID Handle, PVOID Buffer, UINT64 offset, ULONG length, ULONG* bytesRead)> EGFS_READ_CALLBACK;
@@ -66,7 +67,7 @@ public:
 	~EGFS();
 
 	bool SetMountPoint(PCWSTR MountDir, PVOID Security);
-	void AddFile(fs::path& Path, PVOID Context, UINT64 FileSize);
+	void AddFile(fs::path&& Path, PVOID Context, UINT64 FileSize);
 
 	bool Start();
 	bool Stop();
@@ -78,7 +79,7 @@ private:
 	FSP_FILE_SYSTEM* FileSystem;
 	EGFS_READ_CALLBACK OnRead;
 
-	PVOID Security;
+	std::unique_ptr<char[]> Security;
 	SIZE_T SecuritySize;
 
 	WCHAR VolumeLabel[32];

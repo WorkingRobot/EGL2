@@ -1,7 +1,5 @@
 #include "settings.h"
 
-#include <winsock.h>
-
 template <typename T>
 inline T ReadValue(FILE* File) {
 	char val[sizeof(T)];
@@ -33,22 +31,60 @@ inline bool ReadVersion(SETTINGS* Settings, FILE* File, SettingsVersion Version)
 
 		ReadValue<char>(File); // was MountDrive
 
-		Settings->CompressionMethod = ReadValue<int8_t>(File);
-		Settings->CompressionLevel = ReadValue<int8_t>(File);
+		switch (ReadValue<int8_t>(File))
+		{
+		case 0: // downloaded
+		case 3: // explicit zlib
+			Settings->CompressionMethod = SettingsCompressionMethod::Zstandard;
+			break;
+		case 1: // decompressed
+			Settings->CompressionMethod = SettingsCompressionMethod::Decompressed;
+			break;
+		case 2: // lz4
+		default:
+			Settings->CompressionMethod = SettingsCompressionMethod::LZ4;
+			break;
+		}
 
-		Settings->VerifyCache = ReadValue<bool>(File);
-		Settings->EnableGaming = ReadValue<bool>(File);
+		Settings->CompressionLevel = (SettingsCompressionLevel)ReadValue<int8_t>(File);
 
-		strcpy(Settings->CommandArgs, "");
+		ReadValue<bool>(File); // was VerifyCache
+		ReadValue<bool>(File); // was EnableGaming
 		return true;
 	case SettingsVersion::SimplifyPathsAndCmdLine:
 		ReadString(Settings->CacheDir, File);
 
-		Settings->CompressionMethod = ReadValue<int8_t>(File);
-		Settings->CompressionLevel = ReadValue<int8_t>(File);
+		switch (ReadValue<int8_t>(File))
+		{
+		case 0: // downloaded
+		case 3: // explicit zlib
+			Settings->CompressionMethod = SettingsCompressionMethod::Zstandard;
+			break;
+		case 1: // decompressed
+			Settings->CompressionMethod = SettingsCompressionMethod::Decompressed;
+			break;
+		case 2: // lz4
+		default:
+			Settings->CompressionMethod = SettingsCompressionMethod::LZ4;
+			break;
+		}
 
-		Settings->VerifyCache = ReadValue<bool>(File);
-		Settings->EnableGaming = ReadValue<bool>(File);
+		Settings->CompressionLevel = (SettingsCompressionLevel)ReadValue<int8_t>(File);
+
+		ReadValue<bool>(File); // was VerifyCache
+		ReadValue<bool>(File); // was EnableGaming
+
+		ReadString(Settings->CommandArgs, File);
+		return true;
+	case SettingsVersion::Version13:
+		ReadString(Settings->CacheDir, File);
+
+		Settings->CompressionMethod = ReadValue<SettingsCompressionMethod>(File);
+		Settings->CompressionLevel = ReadValue<SettingsCompressionLevel>(File);
+		Settings->UpdateInterval = ReadValue<SettingsUpdateInterval>(File);
+
+		Settings->BufferCount = ReadValue<uint16_t>(File);
+		Settings->ThreadCount = ReadValue<uint16_t>(File);
 
 		ReadString(Settings->CommandArgs, File);
 		return true;
@@ -87,13 +123,26 @@ void SettingsWrite(SETTINGS* Settings, FILE* File)
 
 	WriteString(Settings->CacheDir, File);
 
-	WriteValue<int8_t>(Settings->CompressionMethod, File);
-	WriteValue<int8_t>(Settings->CompressionLevel, File);
+	WriteValue<SettingsCompressionMethod>(Settings->CompressionMethod, File);
+	WriteValue<SettingsCompressionLevel>(Settings->CompressionLevel, File);
+	WriteValue<SettingsUpdateInterval>(Settings->UpdateInterval, File);
 
-	WriteValue<bool>(Settings->VerifyCache, File);
-	WriteValue<bool>(Settings->EnableGaming, File);
+	WriteValue<uint16_t>(Settings->BufferCount, File);
+	WriteValue<uint16_t>(Settings->ThreadCount, File);
 
 	WriteString(Settings->CommandArgs, File);
+}
+
+SETTINGS SettingsDefault() {
+	return {
+		.CacheDir = "",
+		.CompressionMethod = SettingsCompressionMethod::Zstandard,
+		.CompressionLevel = SettingsCompressionLevel::Slow,
+		.UpdateInterval = SettingsUpdateInterval::Minute1,
+		.BufferCount = 128,
+		.ThreadCount = 64,
+		.CommandArgs = "-NOTEXTURESTREAMING -USEALLAVAILABLECORES"
+	};
 }
 
 bool SettingsValidate(SETTINGS* Settings) {
@@ -103,41 +152,60 @@ bool SettingsValidate(SETTINGS* Settings) {
 	return true;
 }
 
+std::chrono::milliseconds SettingsGetUpdateInterval(SETTINGS* Settings)
+{
+	switch (Settings->UpdateInterval)
+	{
+	case SettingsUpdateInterval::Second1:
+		return std::chrono::milliseconds(1 * 1000);
+	case SettingsUpdateInterval::Second5:
+		return std::chrono::milliseconds(5 * 1000);
+	case SettingsUpdateInterval::Second10:
+		return std::chrono::milliseconds(10 * 1000);
+	case SettingsUpdateInterval::Second30:
+		return std::chrono::milliseconds(30 * 1000);
+	case SettingsUpdateInterval::Minute1:
+		return std::chrono::milliseconds(1 * 60 * 1000);
+	case SettingsUpdateInterval::Minute5:
+		return std::chrono::milliseconds(5 * 60 * 1000);
+	case SettingsUpdateInterval::Minute10:
+		return std::chrono::milliseconds(10 * 60 * 1000);
+	case SettingsUpdateInterval::Minute30:
+		return std::chrono::milliseconds(30 * 60 * 1000);
+	case SettingsUpdateInterval::Hour1:
+		return std::chrono::milliseconds(60 * 60 * 1000);
+	}
+}
+
 uint32_t SettingsGetStorageFlags(SETTINGS* Settings) {
-    uint32_t StorageFlags = 0;
-    if (Settings->VerifyCache) {
-        StorageFlags |= StorageVerifyHashes;
-    }
+    uint32_t StorageFlags = StorageVerifyHashes;
     switch (Settings->CompressionMethod)
     {
-    case 0:
-        StorageFlags |= StorageCompressed;
+	case SettingsCompressionMethod::LZ4:
+        StorageFlags |= StorageLZ4;
         break;
-    case 1:
+	case SettingsCompressionMethod::Zstandard:
+        StorageFlags |= StorageZstd;
+        break;
+	case SettingsCompressionMethod::Decompressed:
         StorageFlags |= StorageDecompressed;
-        break;
-    case 2:
-        StorageFlags |= StorageCompressLZ4;
-        break;
-    case 3:
-        StorageFlags |= StorageCompressZlib;
         break;
     }
     switch (Settings->CompressionLevel)
     {
-    case 0:
+	case SettingsCompressionLevel::Fastest:
         StorageFlags |= StorageCompressFastest;
         break;
-    case 1:
+	case SettingsCompressionLevel::Fast:
         StorageFlags |= StorageCompressFast;
         break;
-    case 2:
+	case SettingsCompressionLevel::Normal:
         StorageFlags |= StorageCompressNormal;
         break;
-    case 3:
+	case SettingsCompressionLevel::Slow:
         StorageFlags |= StorageCompressSlow;
         break;
-    case 4:
+	case SettingsCompressionLevel::Slowest:
         StorageFlags |= StorageCompressSlowest;
         break;
     }

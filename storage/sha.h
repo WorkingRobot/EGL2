@@ -1,7 +1,7 @@
 #pragma once
 
-#include <openssl/sha.h>
 #include <cstdint>
+#include <openssl/sha.h>
 
 bool VerifyHash(const char* input, uint32_t inputSize, const char Sha[20]) {
 	char calculatedHash[20];

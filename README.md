@@ -10,6 +10,7 @@
  - Trade performance for disk space, keep your game install compressed
 
 ## Installation / Getting Started
+### This setup is currently outdated. An updated version will be put up soon. Right now, all you need to know is that: **Your install folder needs to be empty! This is separate from what the official launcher has!**
 The process can be a little awkward, so here's a simple step by step guide:
 |Description|Guide (Click one to view it)|
 |--|--|
@@ -36,12 +37,13 @@ I use [CMake for Visual Studio](https://docs.microsoft.com/en-us/cpp/build/cmake
      - (Install these packages with `x64-windows-static`)
      - OpenSSL
      - RapidJSON
-     - zLib
-     - LZ4
- - wxWidgets (if compiling with a GUI)
+     - lz4
+     - zstd
+     - curl
+     - boost
+ - wxWidgets
      - Make sure to set the subsystem from /MD to /MT when compiling
  - WinFsp with the "Developer" feature installed
 
 ### CMake Build Options
- - `WITH_GUI` - if set to false, a command line version will be built instead. (Going to be honest, I haven't checked for any crashes/errors in the console version, but it should work)
- - `WX_DIR` - if you want to build EGL2 with a GUI, set this path to your wxWidgets directory.
+ - `WX_DIR` - Set this path to your wxWidgets directory.

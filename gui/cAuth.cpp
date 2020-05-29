@@ -35,6 +35,8 @@ cAuth::cAuth(cMain* main) : wxModalWindow(main, wxID_ANY, "Launch Game - EGL2", 
 	codeSecInfo = new wxStaticText(panel, wxID_ANY, EXCHANGE_SEC);
 	codeSecBox->Add(codeSecInfo, 1, wxEXPAND);
 
+	codeInput->SetHint("d9c230c0e0354a619249ba1156df5e63");
+
 	auto sizerBtns = new wxBoxSizer(wxHORIZONTAL);
 
 	sizerBtns->Add(codeLink, 1, wxEXPAND | wxRIGHT, 3);

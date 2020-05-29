@@ -3,9 +3,8 @@
 #include "cMain.h"
 #include "wxModalWindow.h"
 
-#include <wx/wx.h>
 #include <wx/hyperlink.h>
-
+#include <wx/wx.h>
 
 class cAuth : public wxModalWindow
 {

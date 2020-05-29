@@ -3,41 +3,36 @@
 #include "cMain.h"
 #include "wxModalWindow.h"
 
-#include <wx/wx.h>
+#include <vector>
+#include <functional>
 #include <wx/filepicker.h>
+#include <wx/wx.h>
 
 class cSetup : public wxModalWindow
 {
 public:
-	cSetup(cMain* main, SETTINGS* settings);
+	using flush_callback = std::function<void(SETTINGS*)>;
+	using validate_callback = std::function<bool(SETTINGS*)>;
+
+	cSetup(cMain* main, SETTINGS* settings, bool startupInvalid, flush_callback callback, validate_callback validator);
 	~cSetup();
 
-protected:
-	wxPanel* topPanel = nullptr;
-
-	wxWindow* settingsContainer = nullptr;
-	wxWindow* checkboxContainer = nullptr;
-	wxStaticBoxSizer* advancedContainer = nullptr;
-
-	wxStaticText* cacheDirTxt = nullptr;
-	wxDirPickerCtrl* cacheDirValue = nullptr;
-
-	wxStaticText* compMethodTxt = nullptr;
-	wxChoice* compMethodValue = nullptr;
-
-	wxStaticText* compLevelTxt = nullptr;
-	wxChoice* compLevelValue = nullptr;
-
-	wxCheckBox* verifyCacheCheckbox = nullptr;
-	wxCheckBox* gameDirCheckbox = nullptr;
-
-	wxStaticText* cmdArgsTxt = nullptr;
-	wxTextCtrl* cmdArgsValue = nullptr;
-
 private:
+	std::vector<std::function<void(SETTINGS* val)>> ReadBinds;
+	std::vector<std::function<void(SETTINGS* val)>> WriteBinds;
+
 	SETTINGS* Settings;
+	bool InvalidStartup;
+	SETTINGS OldSettings;
+	flush_callback Callback;
+	validate_callback Validator;
 
 	void ReadConfig();
 	void WriteConfig();
+
+	void OkClicked();
+	void CancelClicked();
+	void ApplyClicked();
+	void CloseClicked(wxCloseEvent& evt);
 };
 

@@ -1,13 +1,13 @@
 #pragma once
 
-#include <openssl/sha.h>
-
 #include <fstream>
 #include <filesystem>
+#include <openssl/sha.h>
+
 namespace fs = std::filesystem;
 
-inline bool SHAFile(fs::path path, char OutHash[SHA_DIGEST_LENGTH]) {
-    constexpr int buffer_size = 1 << 13;
+inline const bool SHAFile(fs::path path, char OutHash[SHA_DIGEST_LENGTH]) {
+    static constexpr int buffer_size = 1 << 14; // 16384
     char buffer[buffer_size];
     
     SHA_CTX ctx;

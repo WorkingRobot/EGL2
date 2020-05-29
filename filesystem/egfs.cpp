@@ -13,9 +13,9 @@ EGFS::EGFS(EGFS_PARAMS* Params, NTSTATUS& ErrorCode) :
     BOOLEAN Inserted;
 
     OnRead = Params->OnRead;
-    Security = new char[Params->SecuritySize];
+    Security = std::make_unique<char[]>(Params->SecuritySize);
     SecuritySize = Params->SecuritySize;
-    memcpy(Security, Params->Security, Params->SecuritySize);
+    memcpy(Security.get(), Params->Security, Params->SecuritySize);
 
     FSP_FSCTL_VOLUME_PARAMS VolumeParams;
     memset(&VolumeParams, 0, sizeof VolumeParams);
@@ -42,6 +42,8 @@ EGFS::EGFS(EGFS_PARAMS* Params, NTSTATUS& ErrorCode) :
     VolumeTotal = Params->VolumeTotal;
     VolumeFree = Params->VolumeFree;
 
+    FspDebugLogSetHandle(GetStdHandle(STD_OUTPUT_HANDLE));
+
     Result = FspFileSystemCreate(L"" FSP_FSCTL_DISK_DEVICE_NAME, &VolumeParams, &FspInterface, &FileSystem);
     if (!NT_SUCCESS(Result))
     {
@@ -59,7 +61,6 @@ EGFS::EGFS(EGFS_PARAMS* Params, NTSTATUS& ErrorCode) :
 EGFS::~EGFS() {
     if (FileSystem && Started()) {
         FspFileSystemDelete(FileSystem);
-        delete[] Security;
     }
 }
 
@@ -70,7 +71,7 @@ bool EGFS::SetMountPoint(PCWSTR MountPoint, PVOID Security) {
     return NT_SUCCESS(FspFileSystemSetMountPointEx(FileSystem, (PWSTR)MountPoint, Security));
 }
 
-void EGFS::AddFile(fs::path& Path, PVOID Context, UINT64 FileSize)
+void EGFS::AddFile(fs::path&& Path, PVOID Context, UINT64 FileSize)
 {
     Files.AddFile(Path.generic_wstring().c_str(), EGFS_FILE(FileSize, Context));
 }
@@ -224,7 +225,7 @@ NTSTATUS EGFS::GetSecurityByName(FSP_FILE_SYSTEM* FileSystem, PWSTR FileName, PU
         *PSecurityDescriptorSize = Egfs->SecuritySize;
 
         if (SecurityDescriptor)
-            memcpy(SecurityDescriptor, Egfs->Security, Egfs->SecuritySize);
+            memcpy(SecurityDescriptor, Egfs->Security.get(), Egfs->SecuritySize);
     }
 
     return STATUS_SUCCESS;
@@ -351,7 +352,7 @@ NTSTATUS EGFS::GetSecurity(FSP_FILE_SYSTEM* FileSystem, PVOID FileContext, PSECU
 
     *PSecurityDescriptorSize = Egfs->SecuritySize;
     if (SecurityDescriptor)
-        memcpy(SecurityDescriptor, Egfs->Security, Egfs->SecuritySize);
+        memcpy(SecurityDescriptor, Egfs->Security.get(), Egfs->SecuritySize);
 
     return STATUS_SUCCESS;
 }

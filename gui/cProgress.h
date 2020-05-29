@@ -1,11 +1,10 @@
 #pragma once
 
-#include "cMain.h"
 #include "../containers/cancel_flag.h"
-
-#include <wx/wx.h>
+#include "cMain.h"
 
 #include <queue>
+#include <wx/wx.h>
 
 class cProgress : public wxFrame
 {

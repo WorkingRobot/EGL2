@@ -1,8 +1,9 @@
 #pragma once
 
+#define NOMINMAX
 #include "containers/cancel_flag.h"
 #include "filesystem/egfs.h"
-#include "web/manifest.h"
+#include "web/manifest/manifest.h"
 #include "storage/storage.h"
 
 #include <filesystem>
@@ -10,34 +11,28 @@ namespace fs = std::filesystem;
 
 typedef std::function<void(uint32_t max)> ProgressSetMaxHandler;
 typedef std::function<void()> ProgressIncrHandler;
-typedef std::function<void(const char* error)> ErrorHandler;
-typedef std::function<bool()> EnforceSymlinkCreationHandler;
 
 class MountedBuild {
 public:
-	MountedBuild(MANIFEST* manifest, fs::path mountDir, fs::path cachePath, ErrorHandler error);
+	MountedBuild(Manifest manifest, fs::path mountDir, fs::path cachePath, uint32_t storageFlags, uint32_t memoryPoolCapacity);
 	~MountedBuild();
 
-	bool SetupCacheDirectory();
-	bool SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount, EnforceSymlinkCreationHandler enforceSymlinkCreation);
-	bool StartStorage(uint32_t storageFlags);
+	static bool SetupCacheDirectory(fs::path CacheDir);
+	bool SetupGameDirectory(uint32_t threadCount);
 	bool PreloadAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount);
-	void PurgeUnusedChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag);
+	void PurgeUnusedChunks();
 	void VerifyAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount);
+	uint32_t GetMissingChunkCount();
 	void LaunchGame(const char* additionalArgs);
-	bool Mount();
-	bool Unmount();
-	bool Mounted();
 
 private:
-	void LogError(const char* format, ...);
+	void PreloadFile(File& File, uint32_t ThreadCount, cancel_flag& cancelFlag);
 
 	void FileRead(PVOID Handle, PVOID Buffer, UINT64 offset, ULONG length, ULONG* bytesRead);
 
 	fs::path MountDir;
 	fs::path CacheDir;
-	MANIFEST* Manifest;
-	STORAGE* Storage;
-	EGFS* Egfs;
-	ErrorHandler Error;
+	Manifest Build;
+	Storage StorageData;
+	std::unique_ptr<EGFS> Egfs;
 };

@@ -10,10 +10,9 @@ public:
 	cApp();
 	~cApp();
 
-private:
-	cMain* m_frame1 = nullptr;
-
-public:
 	virtual bool OnInit();
+
+	fs::path DataFolder;
+	FILE* LogFile;
 };
 
