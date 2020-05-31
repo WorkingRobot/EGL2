@@ -1,0 +1,78 @@
+Erreur
+Échec dans l'obtention de la localisation de ton dossier "AppData"
+Échec dans la création du "data folder" EGL2
+Échec dans la création du dossier des logs de EGL2
+Échec dans la création du dossier des manifests de EGL2
+Échec dans la création d'un fichier log! Sans lui, je ne peux pas vous assister si vous avez des issues
+Échec dans l'obtention du dossier "Program Files (x86)" . Honêtement, je ne sais pas comment tu aurais cette erreur
+Échec dans la localisation du DLL WinFsp dans le dossier du pilote. Essaye de réinstaller WinFsp.
+Échec du chargement du DLL WinFsp dans le dossier du pilote. Essaye de réinstaller WinFsp.
+Une erreur inconnu est survenu durant le chargement du DLL WinFsp: %d
+Cette "exchange code" est utilisé pour vous identifier à Fortnite. Sans lui, le jeu doesn't know you. To get this code, press the get code button above. Copy the giant blob of numbers and letters, not including the quotes. Paste it into the text box above and click launch.§Exemple d'un "exchange code": d9c230c0e0354a619249ba1156df5e63
+This code expires 5 minutes after visiting the URL and can only be used once. Anyone with this code can impersonate you and take control of your account. When using EGL2, this code is passed directly to the game and is not read, used, stored, or modified for any purpose other than to launch the game.
+Lancer le Jeu
+Insert ton "exchange code"
+Obtenir le code
+Lancer
+Informations de sécurité
+Survoler un boutton pour savoir à quoi il sert
+Configure ton installation
+Vérifie ton jeu (dans le cas où t'as des données corrompues)
+When clicked, it will prompt you to provide your exchange code. After giving it, the game will launch and you'll be good to go.
+Démarrage en cours...
+Démaré! Clique "Jouer" pour commencer à jouer!
+Réglages
+Vérifier
+Jouer
+Utilise le code "furry"! (#pub)
+Description
+Stats
+CPU
+RAM
+Lire
+Écrire
+Fournir
+Télécharger
+Latence
+Threads
+Vérification en cours
+Fortnite est toujours en courd d'exécution! Es-tu sûr de vouloir quitter?
+En cours d'Exécution
+Mise à Jour
+Nouvelle Mise à Jour Fortnite!
+%s est disponible maintenant!
+Clique pour mettre à jour
+Mise à Jour en cours
+Écoulé
+HAP
+Annuler
+Annulation
+Setup
+Zstandard (Non Testé)
+LZ4 (Recommendé)
+Décompressé
+Le Plus Rapide
+Rapide
+Normal
+Lent
+Le Plus Lent
+1 seconde
+5 secondes
+10 secondes
+30 secondes
+1 minute
+5 minutes
+10 minutes
+30 minutes
+1 heure
+Général
+Installer le Dossier
+Méthode de Compression
+Niveau de Compression
+Interval de Mise à Jour
+Avancé
+Nombre de Buffer
+Nombre de Thread
+Command Arguments
+D'accord
+Annuler

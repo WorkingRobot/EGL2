@@ -1,10 +1,14 @@
 APP_ICON ICON "icon.ico"
 
+#include "resources.h"
+
+LOCALE_INFO RCDATA "locales.dat"
+
 #include <wx/msw/wx.rc>
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION    1, 3, 0, 0
-PRODUCTVERSION 1, 3, 0, 0
+FILEVERSION    1, 3, 1, 0
+PRODUCTVERSION 1, 3, 1, 0
 {
     BLOCK "StringFileInfo"
     {
@@ -17,7 +21,7 @@ PRODUCTVERSION 1, 3, 0, 0
             VALUE "LegalCopyright", "EGL2 (c) by Aleks Margarian (WorkingRobot)"
             VALUE "OriginalFilename", "EGL2.exe"
             VALUE "ProductName", "EGL2"
-            VALUE "ProductVersion", "1.3.0.0"
+            VALUE "ProductVersion", "1.3.1.0"
         }
     }
     BLOCK "VarFileInfo"

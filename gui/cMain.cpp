@@ -1,14 +1,5 @@
 #include "cMain.h"
 
-#define DESC_TEXT_DEFAULT  "Hover over a button to see what it does"
-#define DESC_TEXT_SETTINGS "Configure your install"
-#define DESC_TEXT_VERIFY   "Verifies your game (in case you have corrupt data)"
-#define DESC_TEXT_UPDATE   "Ensures you have the latest version"
-#define DESC_TEXT_PLAY     "When clicked, it will prompt you to provide your exchange code. After giving it, the game will launch and you'll be good to go."
-
-#define STATUS_STARTING    "Starting up..."
-#define STATUS_PLAYABLE    "Started! Press \"Play\" to start playing!"
-
 #define CMAIN_W				450
 #define CMAIN_H				330
 
@@ -24,9 +15,9 @@
 #include "../checks/wintoast_handler.h"
 #include "../Logger.h"
 #include "../Stats.h"
-#include "cAuth.h"
 #include "cProgress.h"
 #include "cSetup.h"
+#include "Localization.h"
 
 #include <atomic>
 #include <thread>
@@ -47,25 +38,33 @@
 #define SIDE_BUTTON_DESC(name, desc) \
 	btn_frame_##name->Bind(wxEVT_MOTION, std::bind(&cMain::OnButtonHover, this, desc)); \
 	btn_##name->Bind(wxEVT_MOTION, std::bind(&cMain::OnButtonHover, this, desc)); \
-	btn_frame_##name->Bind(wxEVT_LEAVE_WINDOW, std::bind(&cMain::OnButtonHover, this, DESC_TEXT_DEFAULT)); \
-	btn_##name->Bind(wxEVT_LEAVE_WINDOW, std::bind(&cMain::OnButtonHover, this, DESC_TEXT_DEFAULT));
+	btn_frame_##name->Bind(wxEVT_LEAVE_WINDOW, std::bind(&cMain::OnButtonHover, this, LSTR(MAIN_DESC_DEFAULT))); \
+	btn_##name->Bind(wxEVT_LEAVE_WINDOW, std::bind(&cMain::OnButtonHover, this, LSTR(MAIN_DESC_DEFAULT)));
 
 #define CREATE_STAT(name, displayName, range) \
 	stat##name##Label = new wxStaticText(panel, wxID_ANY, displayName, wxDefaultPosition, wxDefaultSize, wxALIGN_RIGHT); \
-	stat##name##Value = new wxGauge(panel, wxID_ANY, range, wxDefaultPosition, wxSize(105, -1)); \
+	stat##name##Value = new wxGauge(panel, wxID_ANY, range, wxDefaultPosition, wxSize(70, -1)); \
 	stat##name##Text = new wxStaticText(panel, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(45, -1)); \
-	statsSizer->Add(stat##name##Label,      wxGBPosition(statColInd / 2, (statColInd & 0x1) * 3),     wxGBSpan(1, 1), wxEXPAND); \
-	statsSizer->Add(stat##name##Value,      wxGBPosition(statColInd / 2, (statColInd & 0x1) * 3 + 1), wxGBSpan(1, 1), wxEXPAND); \
-	statsSizer->Add(stat##name##Text,       wxGBPosition(statColInd / 2, (statColInd & 0x1) * 3 + 2), wxGBSpan(1, 1), wxEXPAND); \
+	if (statColInd & 0x1) { \
+		statsSizerR->Add(stat##name##Label, wxGBPosition(statColInd / 2, 0), wxGBSpan(1, 1), wxEXPAND); \
+		statsSizerR->Add(stat##name##Value,      wxGBPosition(statColInd / 2, 1), wxGBSpan(1, 1), wxEXPAND); \
+		statsSizerR->Add(stat##name##Text,       wxGBPosition(statColInd / 2, 2), wxGBSpan(1, 1), wxEXPAND); \
+	} \
+	else { \
+		statsSizerL->Add(stat##name##Label, wxGBPosition(statColInd / 2, 0), wxGBSpan(1, 1), wxEXPAND); \
+		statsSizerL->Add(stat##name##Value,      wxGBPosition(statColInd / 2, 1), wxGBSpan(1, 1), wxEXPAND); \
+		statsSizerL->Add(stat##name##Text,       wxGBPosition(statColInd / 2, 2), wxGBSpan(1, 1), wxEXPAND); \
+	} \
 	statColInd++;
 #define STAT_VALUE(name) stat##name##Value
 #define STAT_TEXT(name) stat##name##Text
 
-cMain::cMain(fs::path settingsPath, fs::path manifestCachePath) : wxFrame(nullptr, wxID_ANY, "EGL2", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)),
+cMain::cMain(const fs::path& settingsPath, const fs::path& manifestPath, const std::shared_ptr<PersonalAuth>& personalAuth) : wxFrame(nullptr, wxID_ANY, "EGL2", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)),
 	SettingsPath(settingsPath),
 	Settings(SettingsDefault()),
+	Auth(personalAuth),
 	UpdateAvailable(false) {
-	LOG_DEBUG("Setting up (%s, %s)", settingsPath.string().c_str(), manifestCachePath.string().c_str());
+	LOG_DEBUG("Setting up (%s, %s)", settingsPath.string().c_str(), manifestPath.string().c_str());
 	this->SetIcon(wxICON(APP_ICON));
 	this->SetMinSize(wxSize(CMAIN_W, CMAIN_H));
 	this->SetMaxSize(wxSize(CMAIN_W, CMAIN_H));
@@ -77,9 +76,9 @@ cMain::cMain(fs::path settingsPath, fs::path manifestCachePath) : wxFrame(nullpt
 		wxDefaultSize,
 		wxTAB_TRAVERSAL);
 
-	SIDE_BUTTON_CREATE(settings, "Settings");
-	SIDE_BUTTON_CREATE(verify, "Verify");
-	SIDE_BUTTON_CREATE(play, "Play");
+	SIDE_BUTTON_CREATE(settings, LSTR(MAIN_BTN_SETTINGS));
+	SIDE_BUTTON_CREATE(verify, LSTR(MAIN_BTN_VERIFY));
+	SIDE_BUTTON_CREATE(play, LSTR(MAIN_BTN_PLAY));
 
 	SIDE_BUTTON_BIND(settings, std::bind(&cMain::OnSettingsClicked, this, false));
 	SIDE_BUTTON_BIND(verify, std::bind(&cMain::OnVerifyClicked, this));
@@ -89,28 +88,35 @@ cMain::cMain(fs::path settingsPath, fs::path manifestCachePath) : wxFrame(nullpt
 	SIDE_BUTTON_OBJ(verify)->Disable();
 	SIDE_BUTTON_OBJ(play)->Disable();
 
-	SIDE_BUTTON_DESC(settings, DESC_TEXT_SETTINGS);
-	SIDE_BUTTON_DESC(verify, DESC_TEXT_VERIFY);
-	SIDE_BUTTON_DESC(play, DESC_TEXT_PLAY);
+	SIDE_BUTTON_DESC(settings, LSTR(MAIN_DESC_SETTINGS));
+	SIDE_BUTTON_DESC(verify, LSTR(MAIN_DESC_VERIFY));
+	SIDE_BUTTON_DESC(play, LSTR(MAIN_DESC_PLAY));
 
 	statusBar = new wxStaticText(panel, wxID_ANY, wxEmptyString);
-	selloutBar = new wxStaticText(panel, wxID_ANY, "Use code \"furry\"! (#ad)");
+	selloutBar = new wxStaticText(panel, wxID_ANY, LSTR(MAIN_STATUS_SELLOUT));
 
-	descBox = new wxStaticBoxSizer(wxVERTICAL, panel, "Description");
-	descTxt = new wxStaticText(panel, wxID_ANY, DESC_TEXT_DEFAULT);
+	descBox = new wxStaticBoxSizer(wxVERTICAL, panel, LSTR(MAIN_DESC_TITLE));
+	descTxt = new wxStaticText(panel, wxID_ANY, LSTR(MAIN_DESC_DEFAULT));
 	descBox->Add(descTxt, 1, wxEXPAND);
 
-	statsBox = new wxStaticBoxSizer(wxVERTICAL, panel, "Stats");
-	auto statsSizer = new wxGridBagSizer(2, 4);
+	statsBox = new wxStaticBoxSizer(wxVERTICAL, panel, LSTR(MAIN_STATS_TITLE));
+	auto statsSizer = new wxBoxSizer(wxHORIZONTAL);
+	auto statsSizerL = new wxGridBagSizer(2, 4);
+	auto statsSizerR = new wxGridBagSizer(2, 4);
 	int statColInd = 0;
-	CREATE_STAT(cpu, "CPU", 1000); // divide by 10 to get %
-	CREATE_STAT(ram, "RAM", 384 * 1024 * 1024); // 384 mb
-	CREATE_STAT(read, "Read", 256 * 1024 * 1024); // 256 mb/s
-	CREATE_STAT(write, "Write", 64 * 1024 * 1024); // 64 mb/s
-	CREATE_STAT(provide, "Provide", 256 * 1024 * 1024); // 256 mb/s
-	CREATE_STAT(download, "Download", 64 * 1024 * 1024); // 512 mbps
-	CREATE_STAT(latency, "Latency", 1000); // divide by 10 to get ms
-	CREATE_STAT(threads, "Threads", 128); // 128 threads (threads probably don't ruin performance, probably just shows overhead)
+
+	CREATE_STAT(cpu, LSTR(MAIN_STATS_CPU), 1000); // divide by 10 to get %
+	CREATE_STAT(ram, LSTR(MAIN_STATS_RAM), 384 * 1024 * 1024); // 384 mb
+	CREATE_STAT(read, LSTR(MAIN_STATS_READ), 256 * 1024 * 1024); // 256 mb/s
+	CREATE_STAT(write, LSTR(MAIN_STATS_WRITE), 64 * 1024 * 1024); // 64 mb/s
+	CREATE_STAT(provide, LSTR(MAIN_STATS_PROVIDE), 256 * 1024 * 1024); // 256 mb/s
+	CREATE_STAT(download, LSTR(MAIN_STATS_DOWNLOAD), 64 * 1024 * 1024); // 512 mbps
+	CREATE_STAT(latency, LSTR(MAIN_STATS_LATENCY), 1000); // divide by 10 to get ms
+	CREATE_STAT(threads, LSTR(MAIN_STATS_THREADS), 128); // 128 threads (threads don't ruin performance, probably just indicates overhead)
+
+	statsSizer->Add(statsSizerL);
+	statsSizer->AddStretchSpacer();
+	statsSizer->Add(statsSizerR);
 	statsBox->Add(statsSizer, 1, wxEXPAND);
 
 	auto barSizer = new wxBoxSizer(wxHORIZONTAL);
@@ -131,13 +137,13 @@ cMain::cMain(fs::path settingsPath, fs::path manifestCachePath) : wxFrame(nullpt
 
 	grid->AddGrowableCol(0, 1);
 	grid->AddGrowableCol(1, 1);
-
 	grid->AddGrowableRow(0);
 
 	auto topSizer = new wxBoxSizer(wxVERTICAL);
 	topSizer->Add(grid, wxSizerFlags(1).Expand().Border(wxALL, 5));
-	panel->SetSizerAndFit(topSizer);
 	this->SetSize(wxSize(CMAIN_W, CMAIN_H));
+	panel->SetSizerAndFit(topSizer);
+	grid->RepositionChildren(wxSize(-1, -1));
 
 	LOG_DEBUG("Getting settings");
 	auto settingsFp = fopen(SettingsPath.string().c_str(), "rb");
@@ -151,6 +157,10 @@ cMain::cMain(fs::path settingsPath, fs::path manifestCachePath) : wxFrame(nullpt
 	}
 
 	this->Show();
+	this->Restore();
+	this->Raise();
+	this->SetFocus();
+
 	LOG_DEBUG("Validating settings");
 	if (!SettingsValidate(&Settings)) {
 		LOG_WARN("Invalid settings");
@@ -199,12 +209,15 @@ cMain::cMain(fs::path settingsPath, fs::path manifestCachePath) : wxFrame(nullpt
 	Bind(wxEVT_CLOSE_WINDOW, &cMain::OnClose, this);
 
 	std::thread([=]() {
-		SetStatus(STATUS_STARTING);
+		SetStatus(LSTR(MAIN_STATUS_STARTING));
 		LOG_DEBUG("Creating update checker");
-		Checker = std::make_unique<UpdateChecker>(manifestCachePath, [this](const std::string& Url, const std::string& Version) { OnUpdate(Version, Url); }, SettingsGetUpdateInterval(&Settings));
+		Checker = std::make_unique<UpdateChecker>(
+			manifestPath,
+			[this](const std::string& Url, const std::string& Version) { OnUpdate(Version, Url); },
+			SettingsGetUpdateInterval(&Settings));
 		Mount(Checker->GetLatestUrl());
 		LOG_DEBUG("Enabling buttons");
-		SetStatus(STATUS_PLAYABLE);
+		SetStatus(LSTR(MAIN_STATUS_PLAYABLE));
 		SIDE_BUTTON_OBJ(verify)->Enable();
 		SIDE_BUTTON_OBJ(play)->Enable();
 		LOG_DEBUG("Checking chunk count");
@@ -220,8 +233,8 @@ cMain::~cMain() {
 
 }
 
-void cMain::OnButtonHover(const char* string) {
-	if (strcmp(descTxt->GetLabel().c_str(), string)) {
+void cMain::OnButtonHover(const wxString& string) {
+	if (strcmp(descTxt->GetLabel().c_str(), string.c_str())) {
 		descTxt->SetLabel(string);
 		descBox->Fit(descTxt);
 		descBox->FitInside(descTxt);
@@ -266,7 +279,7 @@ void cMain::OnSettingsClicked(bool onStartup) {
 }
 
 void cMain::OnVerifyClicked() {
-	RUN_PROGRESS("Verifying", VerifyAllChunks, Settings.ThreadCount);
+	RUN_PROGRESS(LSTR(MAIN_PROG_VERIFY), VerifyAllChunks, Settings.ThreadCount);
 }
 
 void cMain::OnPlayClicked() {
@@ -274,10 +287,25 @@ void cMain::OnPlayClicked() {
 		BeginUpdate();
 	}
 	else {
-		cAuth auth(this);
-		auth.ShowModal();
-		if (!auth.GetCode().IsEmpty()) {
-			Build->LaunchGame(wxString::Format(LAUNCH_GAME_ARGS, auth.GetCode(), Settings.CommandArgs).c_str());
+		if (FirstAuthLaunched) {
+			LOG_DEBUG("Recreating auth");
+			Auth->Recreate();
+		}
+		std::string code;
+		LOG_DEBUG("Getting exchange code");
+		if (Auth->GetExchangeCode(code)) {
+			LOG_INFO("Launching game");
+			Build->LaunchGame(wxString::Format(LAUNCH_GAME_ARGS, code, Settings.CommandArgs).c_str());
+			FirstAuthLaunched = true;
+			playBtn->Disable();
+			std::thread([this]() {
+				std::this_thread::sleep_for(ch::seconds(60));
+				LOG_DEBUG("Re-enabling play button");
+				playBtn->Enable();
+			}).detach(); // no spamming :)
+		}
+		else {
+			LOG_ERROR("Could not get exchange code to launch");
 		}
 	}
 }
@@ -305,7 +333,7 @@ void cMain::OnClose(wxCloseEvent& evt)
 				CloseHandle(hnd);
 			}
 		}
-		if (gameRunning && wxMessageBox("Fortnite is still running! Do you still want to exit?", "Currently Running - EGL2", wxICON_QUESTION | wxYES_NO) != wxYES)
+		if (gameRunning && wxMessageBox(LSTR(MAIN_EXIT_VETOMSG), LTITLE(LSTR(MAIN_EXIT_VETOTITLE)), wxICON_QUESTION | wxYES_NO) != wxYES)
 		{
 			evt.Veto();
 			return;
@@ -314,22 +342,22 @@ void cMain::OnClose(wxCloseEvent& evt)
 	Destroy();
 }
 
-void cMain::SetStatus(const char* string) {
+void cMain::SetStatus(const wxString& string) {
 	statusBar->SetLabel(string);
 }
 
 void cMain::OnUpdate(const std::string& Version, const std::optional<std::string>& Url)
 {
 	UpdateAvailable = true;
-	playBtn->SetLabel("Update");
+	playBtn->SetLabel(LSTR(MAIN_BTN_UPDATE));
 	if (Url.has_value()) {
 		UpdateUrl = Url;
 	}
 
 	WinToastTemplate templ = WinToastTemplate(WinToastTemplate::Text02);
-	templ.setTextField(L"New Fortnite Update!", WinToastTemplate::FirstLine);
-	templ.setTextField(wxString::Format("%s is now available!", UpdateChecker::GetReadableVersion(Version)), WinToastTemplate::SecondLine);
-	templ.addAction(L"Click to Update");
+	templ.setTextField(wxString(LSTR(MAIN_NOTIF_TITLE)), WinToastTemplate::FirstLine);
+	templ.setTextField(wxString::Format(LSTR(MAIN_NOTIF_DESC), UpdateChecker::GetReadableVersion(Version)), WinToastTemplate::SecondLine);
+	templ.addAction(wxString(LSTR(MAIN_NOTIF_ACTION)));
 
 	WinToast::WinToastError error;
 	if (!WinToast::instance()->showToast(templ, std::make_shared<ToastHandler>(
@@ -358,7 +386,7 @@ void cMain::BeginUpdate()
 		}
 
 		this->CallAfter([this]() {
-			RUN_PROGRESS("Updating", PreloadAllChunks, Settings.BufferCount);
+			RUN_PROGRESS(LSTR(MAIN_PROG_UPDATE), PreloadAllChunks, Settings.BufferCount);
 		});
 
 		Build->PurgeUnusedChunks();
@@ -366,7 +394,7 @@ void cMain::BeginUpdate()
 	}).detach();
 
 	UpdateAvailable = false;
-	playBtn->SetLabel("Play");
+	playBtn->SetLabel(LSTR(MAIN_BTN_PLAY));
 	UpdateUrl.reset();
 }
 

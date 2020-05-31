@@ -1,11 +1,13 @@
 #include "cProgress.h"
 
+#include "Localization.h"
+
 #include <chrono>
 #include <wx/appprogress.h>
 
 namespace ch = std::chrono;
 
-cProgress::cProgress(cMain* main, wxString taskName, cancel_flag& cancelFlag, float updateFreq, uint32_t maximum) : wxFrame(main, wxID_ANY, taskName + " - EGL2", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)) {
+cProgress::cProgress(cMain* main, wxString taskName, cancel_flag& cancelFlag, float updateFreq, uint32_t maximum) : wxFrame(main, wxID_ANY, LTITLE(taskName), wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)) {
 	value = 0;
 	frequency = updateFreq;
 	maxValue = maximum;
@@ -25,10 +27,10 @@ cProgress::cProgress(cMain* main, wxString taskName, cancel_flag& cancelFlag, fl
 
 	progressPercent = new wxStaticText(panel, wxID_ANY, "0.00%", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
 	progressTotal = new wxStaticText(panel, wxID_ANY, "0 / 0", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
-	progressTimeElapsed = new wxStaticText(panel, wxID_ANY, "Elapsed: 00:00:00", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
-	progressTimeETA = new wxStaticText(panel, wxID_ANY, "ETA: 00:00:00", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
+	progressTimeElapsed = new wxStaticText(panel, wxID_ANY, wxString::Format("%s: 00:00:00", LSTR(PROG_LABEL_ELAPSED)), wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
+	progressTimeETA = new wxStaticText(panel, wxID_ANY, wxString::Format("%s: 00:00:00", LSTR(PROG_LABEL_ETA)), wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
 
-	progressCancelBtn = new wxButton(panel, wxID_ANY, "Cancel");
+	progressCancelBtn = new wxButton(panel, wxID_ANY, LSTR(PROG_BTN_CANCEL));
 	progressTaskbar = new wxAppProgressIndicator(this, maxValue);
 	progressDisabler = new wxWindowDisabler(this);
 
@@ -61,7 +63,7 @@ cProgress::~cProgress() {
 inline void cProgress::Cancel(cancel_flag& cancelFlag) {
 	cancelFlag.cancel();
 	progressCancelBtn->Disable();
-	progressCancelBtn->SetLabel("Cancelling");
+	progressCancelBtn->SetLabel(LSTR(PROG_BTN_CANCELLING));
 }
 
 inline wxString FormatTime(ch::seconds secs) {
@@ -95,11 +97,11 @@ inline void cProgress::Update(bool force) {
 		progressTotal->SetLabel(wxString::Format("%u / %u", val, maxValue));
 
 		auto elapsed = ch::duration_cast<ch::seconds>(now - startTime);
-		progressTimeElapsed->SetLabel("Elapsed: " + FormatTime(elapsed));
+		progressTimeElapsed->SetLabel(wxString::Format("%s: %s", LSTR(PROG_LABEL_ELAPSED), FormatTime(elapsed)));
 
 		auto& timePoint = etaTimePoints.front();
 		auto eta = GetETA(now - timePoint.second, val - timePoint.first, maxValue - val);
-		progressTimeETA->SetLabel("ETA: " + FormatTime(eta));
+		progressTimeETA->SetLabel(wxString::Format("%s: %s", LSTR(PROG_LABEL_ETA), FormatTime(eta)));
 
 		etaTimePoints.push(std::make_pair(val, now));
 		if (etaTimePoints.size() > queueSize) {

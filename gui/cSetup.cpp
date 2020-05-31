@@ -1,15 +1,6 @@
 #include "cSetup.h"
 
-#define VERIFY_TOOLTIP	"Verify data that is read from the cache and redownload\n" \
-						"it if the data is invalid.\n" \
-						"Note: You may take a small performance hit at the expense of stability."
-
-#define GAME_TOOLTIP	"In order to launch the game, a workaround must be done\n" \
-						"where all binaries are copied to a physical drive in order to\n" \
-						"prevent the anticheat from getting grumpy.\n" \
-						"Note: Depending on the install, an additional ~400MB\n" \
-						"of data will need to be allocated on your hard drive."
-
+#include "Localization.h"
 #include "settings.h"
 #include "wxLabelSlider.h"
 
@@ -72,14 +63,14 @@ static const char* updateLevels[] = {
 	WriteBinds.emplace_back([sectionValue##name](SETTINGS* val) { \
 		val->##binder = (under_type)sectionValue##name->GetSelection(); \
 	}); \
-	sectionValue##name->Append(wxArrayString(_countof(choices), choices)); \
+	sectionValue##name->Append(choices); \
 	sectionGrid##section->Add(sectionLabel##name, wxGBPosition(sectionColInd##section, 0), wxGBSpan(1, 1), wxEXPAND); \
 	sectionGrid##section->Add(sectionValue##name, wxGBPosition(sectionColInd##section, 2), wxGBSpan(1, 1), wxEXPAND); \
 	sectionColInd##section++;
 
 #define ADD_ITEM_TEXTSLIDER(section, name, displayName, choices, under_type, binder) \
 	auto sectionLabel##name = new wxStaticText(panel, wxID_ANY, displayName); \
-	auto sectionValue##name = new wxLabelSlider(panel, wxID_ANY, 0, wxArrayString(_countof(choices), choices), wxSL_HORIZONTAL | wxSL_AUTOTICKS); \
+	auto sectionValue##name = new wxLabelSlider(panel, wxID_ANY, 0, choices, wxSL_HORIZONTAL | wxSL_AUTOTICKS); \
 	ReadBinds.emplace_back([sectionValue##name](SETTINGS* val) { \
 		sectionValue##name->SetValue((int)val->##binder); \
 	}); \
@@ -124,7 +115,12 @@ static const char* updateLevels[] = {
 	sectionGrid##name->AddGrowableCol(2); \
 	mainSizer->Add(sectionBox##name, wxSizerFlags().Expand().Border(wxRIGHT | wxLEFT, 10));
 
-cSetup::cSetup(cMain* main, SETTINGS* settings, bool startupInvalid, cSetup::flush_callback callback, cSetup::validate_callback validator) : wxModalWindow(main, wxID_ANY, "Setup - EGL2", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)),
+template <typename... Params>
+inline const wxArrayString GetChoices(Params... params) {
+	return wxArrayStringsAdapter(std::vector<wxString> { params... }).AsArrayString();
+}
+
+cSetup::cSetup(cMain* main, SETTINGS* settings, bool startupInvalid, cSetup::flush_callback callback, cSetup::validate_callback validator) : wxModalWindow(main, wxID_ANY, LTITLE(LSTR(SETUP_TITLE)), wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)),
 	Settings(settings),
 	OldSettings(*settings),
 	InvalidStartup(startupInvalid),
@@ -141,25 +137,48 @@ cSetup::cSetup(cMain* main, SETTINGS* settings, bool startupInvalid, cSetup::flu
 
 	auto mainSizer = new wxBoxSizer(wxVERTICAL);
 
-	
-	DEFINE_SECTION(general, "General");
-	ADD_ITEM_BROWSE(general, cacheDir, "Install Folder", CacheDir);
-	ADD_ITEM_CHOICE(general, compMethod, "Compression Method", compMethods, SettingsCompressionMethod, CompressionMethod);
-	ADD_ITEM_TEXTSLIDER(general, compLevel, "Compression Level", compLevels, SettingsCompressionLevel, CompressionLevel);
-	ADD_ITEM_TEXTSLIDER(general, updateInt, "Update Interval", updateLevels, SettingsUpdateInterval, UpdateInterval);
+	DEFINE_SECTION(general, LSTR(SETUP_GENERAL_LABEL));
+	ADD_ITEM_BROWSE(general, cacheDir, LSTR(SETUP_GENERAL_INSTFOLDER), CacheDir);
+	ADD_ITEM_CHOICE(general, compMethod, LSTR(SETUP_GENERAL_COMPMETHOD),
+		GetChoices(
+			LSTR(SETUP_COMP_METHOD_ZSTD),
+			LSTR(SETUP_COMP_METHOD_LZ4),
+			LSTR(SETUP_COMP_METHOD_DECOMP)
+		),
+		SettingsCompressionMethod, CompressionMethod);
+	ADD_ITEM_TEXTSLIDER(general, compLevel, LSTR(SETUP_GENERAL_COMPLEVEL),
+		GetChoices(
+			LSTR(SETUP_COMP_LEVEL_FASTEST),
+			LSTR(SETUP_COMP_LEVEL_FAST),
+			LSTR(SETUP_COMP_LEVEL_NORMAL),
+			LSTR(SETUP_COMP_LEVEL_SLOW),
+			LSTR(SETUP_COMP_LEVEL_SLOWEST)
+		), SettingsCompressionLevel, CompressionLevel);
+	ADD_ITEM_TEXTSLIDER(general, updateInt, LSTR(SETUP_GENERAL_UPDATEINT),
+		GetChoices(
+			LSTR(SETUP_UPDATE_LEVEL_SEC1),
+			LSTR(SETUP_UPDATE_LEVEL_SEC5),
+			LSTR(SETUP_UPDATE_LEVEL_SEC10),
+			LSTR(SETUP_UPDATE_LEVEL_SEC30),
+			LSTR(SETUP_UPDATE_LEVEL_MIN1),
+			LSTR(SETUP_UPDATE_LEVEL_MIN5),
+			LSTR(SETUP_UPDATE_LEVEL_MIN10),
+			LSTR(SETUP_UPDATE_LEVEL_MIN30),
+			LSTR(SETUP_UPDATE_LEVEL_HOUR1)
+		), SettingsUpdateInterval, UpdateInterval);
 
-	DEFINE_SECTION(advanced, "Advanced");
-	ADD_ITEM_SLIDER(advanced, bufCount, "Buffer Count", 1, 512, uint16_t, BufferCount);
-	ADD_ITEM_SLIDER(advanced, threadCount, "Thread Count", 1, 128, uint16_t, ThreadCount);
-	ADD_ITEM_TEXT(advanced, cmdArgs, "Command Arguments", CommandArgs);
+	DEFINE_SECTION(advanced, LSTR(SETUP_ADVANCED_LABEL));
+	ADD_ITEM_SLIDER(advanced, bufCount, LSTR(SETUP_ADVANCED_BUFCT), 1, 512, uint16_t, BufferCount);
+	ADD_ITEM_SLIDER(advanced, threadCount, LSTR(SETUP_ADVANCED_THDCT), 1, 128, uint16_t, ThreadCount);
+	ADD_ITEM_TEXT(advanced, cmdArgs, LSTR(SETUP_ADVANCED_CMDARGS), CommandArgs);
 
 	APPEND_SECTION_FIRST(general);
 	APPEND_SECTION(advanced);
 
 	auto applySettingsPanel = new wxBoxSizer(wxHORIZONTAL);
 
-	auto okBtn = new wxButton(panel, wxID_ANY, "OK");
-	auto cancelBtn = new wxButton(panel, wxID_ANY, "Cancel");
+	auto okBtn = new wxButton(panel, wxID_ANY, LSTR(SETUP_BTN_OK));
+	auto cancelBtn = new wxButton(panel, wxID_ANY, LSTR(SETUP_BTN_CANCEL));
 	okBtn->Bind(wxEVT_BUTTON, std::bind(&cSetup::OkClicked, this));
 	cancelBtn->Bind(wxEVT_BUTTON, std::bind(&cSetup::CancelClicked, this));
 	applySettingsPanel->Add(okBtn, wxSizerFlags().Border(wxRIGHT, 5));

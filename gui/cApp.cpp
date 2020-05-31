@@ -7,6 +7,7 @@
 #include "../checks/symlink_workaround.h"
 #include "../checks/winfspcheck.h"
 #include "../Logger.h"
+#include "Localization.h"
 
 #include <ShlObj_core.h>
 #include <sstream>
@@ -14,34 +15,44 @@
 
 using namespace WinToastLib;
 
-#define MESSAGE_ERROR(format, ...) wxMessageBox(wxString::Format(format, __VA_ARGS__), "Error - EGL2", wxICON_ERROR | wxOK | wxCENTRE)
+#define MESSAGE_ERROR(format, ...) wxMessageBox(wxString::Format(LSTR(format), __VA_ARGS__), LTITLE(LSTR(APP_ERROR)), wxICON_ERROR | wxOK | wxCENTRE)
 
 cApp::cApp() {
+	if (!Localization::InitializeLocales()) {
+		wxMessageBox("Could not load locale data!", LTITLE("Error"), wxICON_ERROR | wxOK | wxCENTRE);
+		exit(0);
+		return;
+	}
+
 	const char* SetupError = nullptr;
 	fs::path LogPath;
 	{
 		PWSTR appDataFolder;
 		if (SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &appDataFolder) != S_OK) {
-			SetupError = "Could not get the location of your AppData folder.";
-			goto setupExit;
+			MESSAGE_ERROR(APP_ERROR_APPDATA);
+			exit(0);
+			return;
 		}
 		DataFolder = appDataFolder;
 		CoTaskMemFree(appDataFolder);
 	}
 	DataFolder /= "EGL2";
 	if (!fs::create_directories(DataFolder) && !fs::is_directory(DataFolder)) {
-		SetupError = "Could not create EGL2 data folder";
-		goto setupExit;
+		MESSAGE_ERROR(APP_ERROR_DATA);
+		exit(0);
+		return;
 	}
 
 	if (!fs::create_directories(DataFolder / "logs") && !fs::is_directory(DataFolder / "logs")) {
-		SetupError = "Could not create EGL2 logs folder";
-		goto setupExit;
+		MESSAGE_ERROR(APP_ERROR_LOGS);
+		exit(0);
+		return;
 	}
 
 	if (!fs::create_directories(DataFolder / "manifests") && !fs::is_directory(DataFolder / "manifests")) {
-		SetupError = "Could not create EGL2 manifests folder";
-		goto setupExit;
+		MESSAGE_ERROR(APP_ERROR_MANIFESTS);
+		exit(0);
+		return;
 	}
 
 	{
@@ -54,26 +65,20 @@ cApp::cApp() {
 	}
 
 	Logger::Setup();
-	Logger::Callback = [this](Logger::LogLevel level, const char* section, const char* str) {
-		printf("%s%s - %s: %s\n%s", Logger::LevelAsColor(level), Logger::LevelAsString(level), section, str, Logger::ResetColor);
-		if (LogFile) {
-			fprintf(LogFile, "%s - %s: %s\n", Logger::LevelAsString(level), section, str);
-			fflush(LogFile);
-		}
-	};
 
 	LogFile = fopen(LogPath.string().c_str(), "w");
 	if (!LogFile) {
-		MESSAGE_ERROR("Could not create a log file! Without it, I can't assist you with any issues.");
+		MESSAGE_ERROR(APP_ERROR_LOGFILE);
 		LOG_ERROR("Could not create log file!");
+	}
+	else {
+		Logger::Callback = [this](Logger::LogLevel level, const char* section, const char* str) {
+			fprintf(LogFile, "%s - %s: %s\n", Logger::LevelAsString(level), section, str);
+			fflush(LogFile);
+		};
 	}
 
 	LOG_INFO("Starting cApp");
-	return;
-
-setupExit:
-	MESSAGE_ERROR(SetupError);
-	exit(0);
 }
 
 cApp::~cApp() {
@@ -89,16 +94,16 @@ bool cApp::OnInit() {
 		switch (result)
 		{
 		case WinFspCheckResult::NO_PATH:
-			MESSAGE_ERROR("Could not get your Program Files (x86) folder. I honestly have no idea how you'd get this error.");
+			MESSAGE_ERROR(APP_ERROR_PROGFILES86);
 			break;
 		case WinFspCheckResult::NO_DLL:
-			MESSAGE_ERROR("Could not find WinFsp's DLL in the driver's folder. Try reinstalling WinFsp.");
+			MESSAGE_ERROR(APP_ERROR_WINFSP_FIND);
 			break;
 		case WinFspCheckResult::CANNOT_LOAD:
-			MESSAGE_ERROR("Could not load WinFsp's DLL in the driver's folder. Try reinstalling WinFsp.");
+			MESSAGE_ERROR(APP_ERROR_WINFSP_LOAD);
 			break;
 		default:
-			MESSAGE_ERROR("An unknown error occurred when trying to load WinFsp's DLL: %d", result);
+			MESSAGE_ERROR(APP_ERROR_WINFSP_UNKNOWN, result);
 			break;
 		}
 		return false;
@@ -140,8 +145,14 @@ bool cApp::OnInit() {
 		}
 	}
 
+	LOG_INFO("Setting up auth");
+	AuthDetails = std::make_shared<PersonalAuth>(DataFolder / "auth", [](const std::string& verifUrl, const std::string& userCode) {
+		LOG_DEBUG("Launching browser to authorize with device code: %s", userCode.c_str());
+		wxLaunchDefaultBrowser(verifUrl);
+	});
+
 	LOG_INFO("Setting up cMain");
-	(new cMain(DataFolder / "config", DataFolder / "manifests"))->Show();
+	(new cMain(DataFolder / "config", DataFolder / "manifests", AuthDetails))->Show();
 
 	LOG_DEBUG("Set up cApp");
 	return true;

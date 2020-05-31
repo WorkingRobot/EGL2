@@ -21,29 +21,6 @@ inline int random(int min, int max) //range : [min, max)
 	return min + rand() % ((max + 1) - min);
 }
 
-inline void urlencode(const const char* s, std::ostringstream& e)
-{
-	static const char lookup[] = "0123456789abcdef";
-	for (int i = 0, ix = strlen(s); i < ix; i++)
-	{
-		const char& c = s[i];
-		if ((48 <= c && c <= 57) ||//0-9
-			(65 <= c && c <= 90) ||//abc...xyz
-			(97 <= c && c <= 122) || //ABC...XYZ
-			(c == '-' || c == '_' || c == '.' || c == '~')
-			)
-		{
-			e << c;
-		}
-		else
-		{
-			e << '%';
-			e << lookup[(c & 0xF0) >> 4];
-			e << lookup[(c & 0x0F)];
-		}
-	}
-}
-
 ManifestAuth::ManifestAuth(fs::path& cachePath) :
 	CachePath(cachePath),
 	ExpiresAt()
@@ -100,9 +77,9 @@ std::pair<std::string, std::string> ManifestAuth::GetLatestManifest()
 		std::ostringstream oss;
 		oss << uri_val.GetString() << "?";
 		for (auto& itr : queryParams.GetArray()) {
-			urlencode(itr["name"].GetString(), oss);
+			UrlEncode(itr["name"].GetString(), oss);
 			oss << "=";
-			urlencode(itr["value"].GetString(), oss);
+			UrlEncode(itr["value"].GetString(), oss);
 			oss << "&";
 		}
 		oss.seekp(-1, std::ios_base::end); // remove last &
@@ -183,11 +160,13 @@ void ManifestAuth::UpdateIfExpired(bool force)
 
 	auto tokenConn = Client::CreateConnection();
 
-	tokenConn->SetUsePost(true);
 	tokenConn->SetUrl("https://account-public-service-prod03.ol.epicgames.com/account/api/oauth/token");
-	tokenConn->SetRequestBody("grant_type=client_credentials");
+	tokenConn->SetUsePost(true);
+	tokenConn->AddRequestHeader("Authorization", BASIC_FN_AUTH);
 	tokenConn->AddRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-	tokenConn->AddRequestHeader("Authorization", "basic MzRhMDJjZjhmNDQxNGUyOWIxNTkyMTg3NmRhMzZmOWE6ZGFhZmJjY2M3Mzc3NDUwMzlkZmZlNTNkOTRmYzc2Y2Y=");
+
+	tokenConn->SetRequestBody("grant_type=client_credentials");
+
 	tokenConn->Start();
 
 	if (tokenConn->GetResponseCode() != 200) {

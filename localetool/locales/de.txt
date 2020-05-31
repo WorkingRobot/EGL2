@@ -1,0 +1,78 @@
+Fehler
+Der Speicherort des AppData-Ordners konnte nicht abgerufen werden.
+Der EGL2-Datenordner konnte nicht erstellt werden
+Konnte keinen Ordner für EGL2-Protokolle erstellen
+Konnte keinen Ordner für EGL2-Manifeste erstellen
+Konnte keine Protokolldatei erstellen! Ohne sie kann ich Ihnen nicht bei irgendwelchen Problemen helfen.
+Konnte Ihren Ordner Programme (x86) nicht erhalten. Ich habe ehrlich gesagt keine Ahnung, wie Sie an diesen Fehler gekommen sind.
+Die DLL von WinFsp konnte im Ordner des Treibers nicht gefunden werden. Versuchen Sie, WinFsp neu zu installieren.
+cVersuchen Sie, WinFsp neu zu installieren.
+Beim Versuch, die DLL von WinFsp zu laden, ist ein unbekannter Fehler aufgetreten: %d
+Dieser Austauschcode wird verwendet, um Sie bei Fortnite anzumelden. Ohne diesen Code kennt das Spiel Sie nicht. Um diesen Code zu erhalten, drücken Sie die Schaltfläche "Code erhalten" oben. Kopieren Sie den riesigen Klecks aus Zahlen und Buchstaben, ohne die Anführungszeichen. Fügen Sie ihn in das Textfeld oben ein und klicken Sie auf Start.§Beispiel für einen Austauschcode: d9c230c0e0354a619249ba1156df5e63
+Dieser Code läuft 5 Minuten nach dem Besuch der URL ab und kann nur einmal verwendet werden. Jeder mit diesem Code kann sich für Sie ausgeben und die Kontrolle über Ihr Konto übernehmen. Bei der Verwendung von EGL2 wird dieser Code direkt an das Spiel weitergegeben und wird nicht gelesen, verwendet, gespeichert oder für einen anderen Zweck als den Start des Spiels modifiziert.
+Spiel starten
+Geben Sie Ihren Austauschcode ein
+Code abrufen
+starten.
+Sicherheitsinformationen
+Fahren Sie mit der Maus über eine Schaltfläche, um zu sehen, was sie bewirkt
+Konfigurieren Sie Ihre Installation
+Verifiziert Ihr Spiel (für den Fall, dass Sie beschädigte Daten haben)
+Wenn Sie darauf klicken, werden Sie aufgefordert, Ihren Austauschcode einzugeben. Nachdem Sie ihn eingegeben haben, wird das Spiel gestartet und Sie können loslegen.
+Die Inbetriebnahme...
+Angefangen! Drücken Sie "Play", um das Spiel zu starten!
+Einstellungen
+überprüfen
+spielen
+Verwenden Sie den Code "furry"! (#ad)
+Beschreibung
+Stats
+Prozessor
+speicher
+lesen
+schreiben Sie
+zur Verfügung stellen
+herunterladen
+Latenz
+Themen
+Verifizierung
+Fortnite läuft noch immer! Wollen Sie immer noch aussteigen?
+Läuft derzeit
+Aktualisierung
+Neues Fortnite klicken!
+%s ist jetzt verfügbar!
+Zum Aktualisieren klicken
+Aktualisierung von
+Verstrichen
+ETA
+Abbrechen
+Stornierung
+Einrichtung
+zStandard (nicht getestet)
+LZ4 (empfohlen)
+Dekomprimiert
+Schnellste
+Schnell
+Normalen
+Langsam
+Langsamste
+1 Sekunde
+5 Sekunde
+10 Sekunde
+30 Sekunde
+1 Minuten
+5 Minuten
+10 Minuten
+30 Minuten
+1 Stunde
+Allgemein
+Installationsordner
+Kompressionsverfahren
+Kompressionsstufe
+Aktualisierungsintervall
+Fortgeschrittene
+Puffer-Anzahl
+Anzahl der Gewinde
+Kommando-Argumente
+na
+Abbrechen

@@ -8,12 +8,15 @@ aux_source_directory(. FILE_SOURCES)
 aux_source_directory(filesystem FILESYSTEM_FILE_SOURCES)
 aux_source_directory(storage STORAGE_FILE_SOURCES)
 aux_source_directory(web WEB_FILE_SOURCES)
+aux_source_directory(web/personal PERSONAL_FILE_SOURCES)
 aux_source_directory(web/manifest MANIFEST_FILE_SOURCES)
 aux_source_directory(web/http HTTP_FILE_SOURCES)
 aux_source_directory(checks CHECKS_FILE_SOURCES)
 aux_source_directory(gui INTERFACE_FILE_SOURCES)
 aux_source_directory(libraries/wintoast WINTOAST_FILE_SOURCES)
 aux_source_directory(libraries/curlion CURLION_FILE_SOURCES)
+
+aux_source_directory(localetool LOCALETOOL_FILE_SOURCES)
 
 add_executable(EGL2 WIN32
         ${INTERFACE_FILE_SOURCES}
@@ -24,9 +27,13 @@ add_executable(EGL2 WIN32
         ${STORAGE_FILE_SOURCES}
         ${WEB_FILE_SOURCES}
         ${MANIFEST_FILE_SOURCES}
+        ${PERSONAL_FILE_SOURCES}
         ${HTTP_FILE_SOURCES}
         ${CHECKS_FILE_SOURCES}
         ${FILE_SOURCES})
+
+add_executable(LocaleTool
+        ${LOCALETOOL_FILE_SOURCES})
 
 set(wxWidgets_ROOT_DIR "${WX_DIR}")
 set(wxWidgets_LIB_DIR "${WX_DIR}/lib/vc_x64_lib")
@@ -43,6 +50,7 @@ set(Boost_USE_STATIC_LIBS ON)
 add_definitions(-DBOOST_ASIO_DISABLE_CONCEPTS)
 
 set_property(TARGET EGL2 PROPERTY CXX_STANDARD 20)
+set_property(TARGET LocaleTool PROPERTY CXX_STANDARD 20)
 
 find_package(OpenSSL REQUIRED)
 find_package(RapidJSON CONFIG REQUIRED)
@@ -82,3 +90,5 @@ endforeach()
 target_link_options(EGL2 PRIVATE "/DELAYLOAD:winfsp-x64.dll")
 target_include_directories(EGL2 PRIVATE "$ENV{ProgramFiles\(x86\)}\\WinFsp\\inc" ${Boost_LIBRARIES} ${RAPIDJSON_INCLUDE_DIRS} "libraries\\libdeflate" "libraries\\wintoast" "libraries\\curlion")
 target_link_libraries(EGL2 PRIVATE "$ENV{ProgramFiles\(x86\)}\\WinFsp\\lib\\winfsp-x64.lib" ${wxWidgets_LIBRARIES} CURL::libcurl OpenSSL::Crypto Crypt32 libzstd lz4::lz4 delayimp "${CMAKE_CURRENT_SOURCE_DIR}\\libraries\\libdeflate\\libdeflatestatic.lib")
+
+target_link_libraries(LocaleTool PRIVATE libzstd)

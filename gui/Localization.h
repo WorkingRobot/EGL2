@@ -1,0 +1,129 @@
+#pragma once
+
+#define LSTR(name) Localization::GetString(LocaleString::name)
+#define LTITLE(str) wxString::Format("%s - EGL2", str)
+
+#include <memory>
+
+enum class Locale : uint8_t {
+	EN,		// English
+	FR,		// French
+	ES,		// Spanish
+	DE,		// German
+	AR,		// Arabic
+	RU,		// Russian
+	IT,		// Italian
+	PT_BR,	// Brazilian Portuguese
+	PL,		// Polish
+	// If you want to help with translating EGL2 into other languages, dm me @AsrielD#6969
+	Count
+};
+
+enum class LocaleString : uint16_t {
+	APP_ERROR,
+	APP_ERROR_APPDATA,
+	APP_ERROR_DATA,
+	APP_ERROR_LOGS,
+	APP_ERROR_MANIFESTS,
+	APP_ERROR_LOGFILE,
+	APP_ERROR_PROGFILES86,
+	APP_ERROR_WINFSP_FIND,
+	APP_ERROR_WINFSP_LOAD,
+	APP_ERROR_WINFSP_UNKNOWN,
+
+	AUTH_EXCHANGE_INFO,
+	AUTH_EXCHANGE_SEC,
+	AUTH_TITLE,
+	AUTH_CODE_LABEL,
+	AUTH_CODE_LINK,
+	AUTH_CODE_LAUNCH,
+	AUTH_CODE_SECLABEL,
+
+	MAIN_DESC_DEFAULT,
+	MAIN_DESC_SETTINGS,
+	MAIN_DESC_VERIFY,
+	MAIN_DESC_PLAY,
+	MAIN_STATUS_STARTING,
+	MAIN_STATUS_PLAYABLE,
+	MAIN_BTN_SETTINGS,
+	MAIN_BTN_VERIFY,
+	MAIN_BTN_PLAY,
+	MAIN_STATUS_SELLOUT,
+	MAIN_DESC_TITLE,
+	MAIN_STATS_TITLE,
+	MAIN_STATS_CPU,
+	MAIN_STATS_RAM,
+	MAIN_STATS_READ,
+	MAIN_STATS_WRITE,
+	MAIN_STATS_PROVIDE,
+	MAIN_STATS_DOWNLOAD,
+	MAIN_STATS_LATENCY,
+	MAIN_STATS_THREADS,
+	MAIN_PROG_VERIFY,
+	MAIN_EXIT_VETOMSG,
+	MAIN_EXIT_VETOTITLE,
+	MAIN_BTN_UPDATE,
+	MAIN_NOTIF_TITLE,
+	MAIN_NOTIF_DESC,
+	MAIN_NOTIF_ACTION,
+	MAIN_PROG_UPDATE,
+
+	PROG_LABEL_ELAPSED,
+	PROG_LABEL_ETA,
+	PROG_BTN_CANCEL,
+	PROG_BTN_CANCELLING,
+
+	SETUP_TITLE,
+	SETUP_COMP_METHOD_ZSTD,
+	SETUP_COMP_METHOD_LZ4,
+	SETUP_COMP_METHOD_DECOMP,
+	SETUP_COMP_LEVEL_FASTEST,
+	SETUP_COMP_LEVEL_FAST,
+	SETUP_COMP_LEVEL_NORMAL,
+	SETUP_COMP_LEVEL_SLOW,
+	SETUP_COMP_LEVEL_SLOWEST,
+	SETUP_UPDATE_LEVEL_SEC1,
+	SETUP_UPDATE_LEVEL_SEC5,
+	SETUP_UPDATE_LEVEL_SEC10,
+	SETUP_UPDATE_LEVEL_SEC30,
+	SETUP_UPDATE_LEVEL_MIN1,
+	SETUP_UPDATE_LEVEL_MIN5,
+	SETUP_UPDATE_LEVEL_MIN10,
+	SETUP_UPDATE_LEVEL_MIN30,
+	SETUP_UPDATE_LEVEL_HOUR1,
+	SETUP_GENERAL_LABEL,
+	SETUP_GENERAL_INSTFOLDER,
+	SETUP_GENERAL_COMPMETHOD,
+	SETUP_GENERAL_COMPLEVEL,
+	SETUP_GENERAL_UPDATEINT,
+	SETUP_ADVANCED_LABEL,
+	SETUP_ADVANCED_BUFCT,
+	SETUP_ADVANCED_THDCT,
+	SETUP_ADVANCED_CMDARGS,
+	SETUP_BTN_OK,
+	SETUP_BTN_CANCEL,
+
+	Count
+};
+
+class Localization {
+public:
+	Localization() = delete;
+	Localization(const Localization&) = delete;
+	Localization& operator=(const Localization&) = delete;
+
+	static bool InitializeLocales();
+
+	static inline void LoadLocale(Locale locale) {
+		SelectedLocale = locale;
+	}
+
+	static inline const char* GetString(LocaleString string) {
+		return LocaleStrings[(int)SelectedLocale][(int)string].get();
+	}
+
+private:
+	static inline Locale SelectedLocale = Locale::EN;
+
+	static inline std::unique_ptr<char[]> LocaleStrings[(int)Locale::Count][(int)LocaleString::Count];
+};

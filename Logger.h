@@ -27,7 +27,10 @@ public:
 		auto size = snprintf(nullptr, 0, str, args...) + 1;
 		auto buf = std::make_unique<char[]>(size);
 		snprintf(buf.get(), size, str, args...);
-		Callback(level, section, buf.get());
+		printf("%s%s - %s: %s\n%s", Logger::LevelAsColor(level), Logger::LevelAsString(level), section, buf.get(), Logger::ResetColor);
+		if (Callback) {
+			Callback(level, section, buf.get());
+		}
 	}
 
 	static constexpr const char* LevelAsString(LogLevel level) {

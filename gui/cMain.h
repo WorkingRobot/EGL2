@@ -3,17 +3,19 @@
 #define NOMINMAX
 #include "../MountedBuild.h"
 #include "../web/manifest/auth.h"
+#include "../web/personal/PersonalAuth.h"
 #include "UpdateChecker.h"
 #include "settings.h"
 
 #include <wx/wx.h>
 
+#include <memory>
 #include <optional>
 
 class cMain : public wxFrame
 {
 public:
-	cMain(fs::path settingsPath, fs::path manifestPath);
+	cMain(const fs::path& settingsPath, const fs::path& manifestPath, const std::shared_ptr<PersonalAuth>& personalAuth);
 	~cMain();
 
 protected:
@@ -45,7 +47,7 @@ protected:
 	wxStaticText* statusBar = nullptr;
 	wxStaticText* selloutBar = nullptr;
 
-	void OnButtonHover(const char* string);
+	void OnButtonHover(const wxString& string);
 
 	void OnSettingsClicked(bool onStartup);
 	void OnVerifyClicked();
@@ -53,13 +55,16 @@ protected:
 	
 	void OnClose(wxCloseEvent& evt);
 
-	void SetStatus(const char* string);
+	void SetStatus(const wxString& string);
 
 	void OnUpdate(const std::string& Version, const std::optional<std::string>& Url = std::nullopt);
 	void BeginUpdate();
 
 private:
 	void Mount(const std::string& Url);
+
+	bool FirstAuthLaunched = false;
+	std::shared_ptr<PersonalAuth> Auth;
 
 	bool UpdateAvailable;
 	std::optional<std::string> UpdateUrl;

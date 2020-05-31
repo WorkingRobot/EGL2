@@ -11,7 +11,7 @@ public:
 	std::error_condition StartConnection(const std::shared_ptr<curlion::Connection>& connection);
 	std::error_condition AbortConnection(const std::shared_ptr<curlion::Connection>& connection);
 
-	static std::shared_ptr<curlion::HttpConnection> CreateConnection() {
+	static inline std::shared_ptr<curlion::HttpConnection> CreateConnection() {
 		auto conn = std::make_shared<curlion::HttpConnection>();
 		//conn->SetVerbose(true);
 		//conn->SetProxy("127.0.0.1:8888");

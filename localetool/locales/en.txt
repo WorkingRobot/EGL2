@@ -1,0 +1,78 @@
+Error
+Could not get the location of your AppData folder
+Could not create EGL2 data folder
+Could not create EGL2 logs folder
+Could not create EGL2 manifests folder
+Could not create a log file! Without it, I can't assist you with any issues.
+Could not get your Program Files (x86) folder. I honestly have no idea how you'd get this error.
+Could not find WinFsp's DLL in the driver's folder. Try reinstalling WinFsp.
+Could not load WinFsp's DLL in the driver's folder. Try reinstalling WinFsp.
+An unknown error occurred when trying to load WinFsp's DLL: %d
+This exchange code is used to log you into Fortnite. Without it, the game doesn't know you. To get this code, press the get code button above. Copy the giant blob of numbers and letters, not including the quotes. Paste it into the text box above and click launch.§Example exchange code: d9c230c0e0354a619249ba1156df5e63
+This code expires 5 minutes after visiting the URL and can only be used once. Anyone with this code can impersonate you and take control of your account. When using EGL2, this code is passed directly to the game and is not read, used, stored, or modified for any purpose other than to launch the game.
+Launch Game
+Enter your exchange code
+Get Code
+Launch
+Security Info
+Hover over a button to see what it does
+Configure your install
+Verifies your game (in case you have corrupt data)
+Launch the game and start grinding 90s!
+Starting up...
+Started! Press "Play" to start playing!
+Settings
+Verify
+Play
+Use code "furry"! (#ad)
+Description
+Stats
+CPU
+RAM
+Read
+Write
+Provide
+Download
+Latency
+Threads
+Verifying
+Fortnite is still running! Do you still want to exit?
+Currently Running
+Update
+New Fortnite Update!
+%s is now available!
+Click to Update
+Updating
+Elapsed
+ETA
+Cancel
+Cancelling
+Setup
+Zstandard (Not tested)
+LZ4 (Recommended)
+Decompressed
+Fastest
+Fast
+Normal
+Slow
+Slowest
+1 second
+5 seconds
+10 seconds
+30 seconds
+1 minute
+5 minutes
+10 minutes
+30 minutes
+1 hour
+General
+Install Folder
+Compression Method
+Compression Level
+Update Interval
+Advanced
+Buffer Count
+Thread Count
+Command Arguments
+OK
+Cancel

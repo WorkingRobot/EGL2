@@ -26,6 +26,14 @@ std::error_condition HttpForm::AddPart(const std::shared_ptr<Part>& part) {
     
     return error;
 }
+
+std::error_condition HttpForm::AddPart(const Part&& part) {
+    return AddPart(std::make_shared<Part>(part));
+}
+
+std::error_condition HttpForm::AddPart(const std::string& name, const std::string& content) {
+    return AddPart(Part(name, content));
+}
     
     
 static std::vector<curl_forms> CreateOptions(const std::shared_ptr<HttpForm::Part>& part) {

@@ -109,6 +109,8 @@ public:
          Return an error on failure.
      */
     std::error_condition AddPart(const std::shared_ptr<Part>& part);
+    std::error_condition AddPart(const Part&& part);
+    std::error_condition AddPart(const std::string& name, const std::string& content);
     
     /**
      Get the handle of the form.
