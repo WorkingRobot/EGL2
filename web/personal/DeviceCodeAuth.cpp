@@ -22,10 +22,8 @@ DeviceCodeAuth::DeviceCodeAuth(DevCodeCallback setupCb)
 
 		tokenConn->SetRequestBody("grant_type=client_credentials");
 
-		tokenConn->Start();
-
-		if (tokenConn->GetResponseCode() != 200) {
-			LOG_ERROR("Getting access token: Response code %d", tokenConn->GetResponseCode());
+		if (!Client::Execute(tokenConn)) {
+			LOG_ERROR("Getting access token: failed");
 			return;
 		}
 
@@ -46,10 +44,9 @@ DeviceCodeAuth::DeviceCodeAuth(DevCodeCallback setupCb)
 		deviceConn->SetUrl("https://account-public-service-prod03.ol.epicgames.com/account/api/oauth/deviceAuthorization");
 		deviceConn->SetUsePost(true);
 		deviceConn->AddRequestHeader("Authorization", "bearer " + accessToken);
-		deviceConn->Start();
-
-		if (deviceConn->GetResponseCode() != 200) {
-			LOG_ERROR("Init device code: Response code %d", deviceConn->GetResponseCode());
+		
+		if (!Client::Execute(deviceConn)) {
+			LOG_ERROR("Init device code token: failed");
 			return;
 		}
 
@@ -79,7 +76,10 @@ DeviceCodeAuth::DeviceCodeAuth(DevCodeCallback setupCb)
 		form.emplace_back("device_code", deviceCode);
 		deviceConn->SetRequestBody(EncodeUrlForm(form));
 
-		deviceConn->Start();
+		if (!Client::Execute(deviceConn, true)) {
+			LOG_ERROR("Attempt device code: failed");
+			continue;
+		}
 
 		switch (deviceConn->GetResponseCode()) {
 		case 200:

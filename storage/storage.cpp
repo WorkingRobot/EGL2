@@ -190,10 +190,7 @@ Compressor::buffer_value Storage::DownloadChunk(std::shared_ptr<Chunk> Chunk)
     {
         auto chunkConn = Client::CreateConnection();
         chunkConn->SetUrl(CloudDir + Chunk->GetUrl());
-        chunkConn->Start();
-
-        if (chunkConn->GetResponseCode() != 200) {
-            LOG_ERROR("Response code %d", chunkConn->GetResponseCode());
+        if (!Client::Execute(chunkConn)) {
             LOG_WARN("Retrying...");
             return DownloadChunk(Chunk);
         }

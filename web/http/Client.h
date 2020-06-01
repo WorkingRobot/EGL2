@@ -19,7 +19,11 @@ public:
 		return conn;
 	}
 
+	static bool Execute(const std::shared_ptr<curlion::HttpConnection>& connection, bool allowNon200 = false);
+
 private:
+	static FILE* CreateTempFile();
+
 	void* io_service;
 	std::unique_ptr<curlion::ConnectionManager> connection_manager;
 };

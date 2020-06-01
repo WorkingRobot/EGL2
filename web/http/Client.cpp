@@ -1,6 +1,14 @@
 #include "Client.h"
 
+#ifndef LOG_SECTION
+#define LOG_SECTION "Http"
+#endif
+
+#include "../../Logger.h"
+
 #include <boost/asio.hpp>
+#include <fcntl.h>
+#include <io.h>
 
 class AsioTimer : public curlion::Timer {
 public:
@@ -214,4 +222,73 @@ std::error_condition Client::StartConnection(const std::shared_ptr<curlion::Conn
 std::error_condition Client::AbortConnection(const std::shared_ptr<curlion::Connection>& connection)
 {
     return connection_manager->AbortConnection(connection);
+}
+
+bool Client::Execute(const std::shared_ptr<curlion::HttpConnection>& connection, bool allowNon200)
+{
+    char errbuf[CURL_ERROR_SIZE];
+    curl_easy_setopt(connection->GetHandle(), CURLOPT_ERRORBUFFER, errbuf);
+
+    int retryCount = 5;
+    FILE* vFp;
+    do {
+        if (retryCount == 1) {
+            connection->SetVerbose(true);
+            vFp = CreateTempFile();
+            curl_easy_setopt(connection->GetHandle(), CURLOPT_STDERR, vFp);
+        }
+        connection->Start();
+        if (connection->GetResult() != CURLE_OK) {
+            LOG_ERROR("Curl error %d: %s", connection->GetResult(),
+                strlen(errbuf) ?
+                errbuf :
+                curl_easy_strerror(connection->GetResult()));
+        }
+        else if (!allowNon200 && connection->GetResponseCode() != 200) {
+            LOG_ERROR("Response code was %d. Response data: %s", connection->GetResponseCode(), connection->GetResponseBody().c_str());
+        }
+        else {
+            return true;
+        }
+    } while (--retryCount);
+
+    auto vSize = ftell(vFp);
+    auto vData = std::unique_ptr<char[]>(new char[vSize + 1]);
+
+    rewind(vFp);
+    fread(vData.get(), vSize, 1, vFp);
+    vData.get()[vSize] = '\0';
+    fclose(vFp);
+
+    LOG_ERROR("Ran out of retries. Debug info:\n%s", vData.get());
+    return false;
+}
+
+// from https://github.com/martinh/libconfuse/blob/c0e7e74bc492a1791c044208d26502a559c03cb9/src/fmemopen.c#L124
+FILE* Client::CreateTempFile()
+{
+    int fd;
+    FILE* fp;
+    char tp[MAX_PATH - 13];
+    char fn[MAX_PATH + 1];
+
+    if (!GetTempPathA(sizeof(tp), tp))
+        return NULL;
+
+    if (!GetTempFileNameA(tp, "confuse", 0, fn))
+        return NULL;
+
+    fd = _open(fn,
+        _O_CREAT | _O_RDWR | _O_SHORT_LIVED | _O_TEMPORARY | _O_BINARY,
+        _S_IREAD | _S_IWRITE);
+    if (fd == -1)
+        return NULL;
+
+    fp = _fdopen(fd, "w+");
+    if (!fp) {
+        _close(fd);
+        return NULL;
+    }
+
+    return fp;
 }

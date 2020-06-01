@@ -45,7 +45,10 @@ std::pair<std::string, std::string> ManifestAuth::GetLatestManifest()
 	manifestConn->AddRequestHeader("Authorization", authHeader.get());
 	manifestConn->AddRequestHeader("Content-Type", "application/json");
 
-	manifestConn->Start();
+	if (!Client::Execute(manifestConn, true)) {
+		LOG_WARN("Retrying...");
+		return GetLatestManifest();
+	}
 
 	if (manifestConn->GetResponseCode() != 200) {
 		if (manifestConn->GetResponseCode() == 401) { // unauthorized
@@ -119,10 +122,8 @@ Manifest ManifestAuth::GetManifest(const std::string& Url)
 		LOG_DEBUG("Manifest is not cached");
 		auto manifestConn = Client::CreateConnection();
 		manifestConn->SetUrl(Url);
-		manifestConn->Start();
-		
-		if (manifestConn->GetResponseCode() != 200) {
-			LOG_ERROR("Response code %d", manifestConn->GetResponseCode());
+
+		if (!Client::Execute(manifestConn)) {
 			LOG_WARN("Retrying...");
 			return GetManifest(Url);
 		}
@@ -167,10 +168,7 @@ void ManifestAuth::UpdateIfExpired(bool force)
 
 	tokenConn->SetRequestBody("grant_type=client_credentials");
 
-	tokenConn->Start();
-
-	if (tokenConn->GetResponseCode() != 200) {
-		LOG_ERROR("Response code %d", tokenConn->GetResponseCode());
+	if (!Client::Execute(tokenConn)) {
 		LOG_WARN("Retrying...");
 		return UpdateIfExpired(true);
 	}
