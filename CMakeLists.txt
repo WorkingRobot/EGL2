@@ -1,4 +1,4 @@
-﻿cmake_minimum_required (VERSION 3.9.2)
+cmake_minimum_required (VERSION 3.9.2)
 
 project (EGL2) 
 
@@ -66,8 +66,8 @@ message(STATUS "Signing files")
 file(READ "cert.pwd" SIGN_PASS)
 add_custom_command(TARGET EGL2 POST_BUILD
     COMMAND
-        "${CMAKE_SOURCE_DIR}/libraries/signtool/signtool" sign /f "${CMAKE_SOURCE_DIR}/cert.pfx" /p "${SIGN_PASS}" /fd sha1 /t http://timestamp.digicert.com /v $<TARGET_FILE:EGL2> &&
-        "${CMAKE_SOURCE_DIR}/libraries/signtool/signtool" sign /f "${CMAKE_SOURCE_DIR}/cert.pfx" /p "${SIGN_PASS}" /fd sha256 /tr http://timestamp.digicert.com?td=sha256 /td sha256 /as /v $<TARGET_FILE:EGL2>
+        signtool sign /f "${CMAKE_SOURCE_DIR}/cert.pfx" /p "${SIGN_PASS}" /fd sha1 /t http://timestamp.digicert.com /v $<TARGET_FILE:EGL2> &&
+        signtool sign /f "${CMAKE_SOURCE_DIR}/cert.pfx" /p "${SIGN_PASS}" /fd sha256 /tr http://timestamp.digicert.com?td=sha256 /td sha256 /as /v $<TARGET_FILE:EGL2>
 )
 endif()
 
