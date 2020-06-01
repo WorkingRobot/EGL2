@@ -1,6 +1,5 @@
 #pragma once
 
-#define NOMINMAX
 #include "containers/cancel_flag.h"
 #include "filesystem/egfs.h"
 #include "web/manifest/manifest.h"

@@ -128,6 +128,7 @@ bool MountedBuild::SetupCacheDirectory(fs::path CacheDir) {
         fs::create_directory(CacheDir / cachePartFolder);
     }
 
+    /* game dir isn't used anymore, this code is kinda wacked up
     auto oldGameDir = CacheDir / "game";
     if (fs::is_directory(oldGameDir)) {
         LOG_INFO("Removing old game folder %s", oldGameDir.string().c_str());
@@ -144,6 +145,7 @@ bool MountedBuild::SetupCacheDirectory(fs::path CacheDir) {
             LOG_ERROR("Could not remove old game folder: %s", ec.message().c_str());
         }
     }
+    */
     return true;
 }
 
@@ -209,12 +211,13 @@ bool MountedBuild::SetupGameDirectory(uint32_t threadCount) {
 
     bool symlinkCreationEnforced = false;
     cancel_flag flag;
+    std::error_code ec;
     for (auto& file : Build.FileManifestList) {
         fs::path filePath = file.FileName;
         fs::path folderPath = filePath.parent_path();
 
-        if (!fs::create_directories(gameDir / folderPath) && !fs::is_directory(gameDir / folderPath)) {
-            LOG_ERROR("can't create %s\n", (gameDir / folderPath).string().c_str());
+        if (!fs::create_directories(gameDir / folderPath, ec) && !fs::is_directory(gameDir / folderPath)) {
+            LOG_ERROR("Can't create folder %s, error %s", folderPath.string().c_str(), ec.message().c_str());
             goto continueFileLoop;
         }
         do {
@@ -222,10 +225,13 @@ bool MountedBuild::SetupGameDirectory(uint32_t threadCount) {
                 if (!CompareFile(file, gameDir / filePath)) {
                     PreloadFile(file, threadCount, flag);
                     if (fs::status(gameDir / filePath).type() == fs::file_type::regular) {
-                        fs::permissions(gameDir / filePath, fs::perms::_All_write, fs::perm_options::add); // copying over a file from the drive gives it the read-only attribute, this overrides that
+                        fs::permissions(gameDir / filePath, fs::perms::_All_write, fs::perm_options::add, ec); // copying over a file from the drive gives it the read-only attribute, this overrides that
+                        if (ec) {
+                            LOG_ERROR("Could not add permission for %s, error %s", filePath.string().c_str(), ec.message().c_str());
+                        }
                     }
-                    if (!fs::copy_file(MountDir / filePath, gameDir / filePath, fs::copy_options::overwrite_existing)) {
-                        LOG_ERROR("failed to copy %s", filePath.string().c_str());
+                    if (!fs::copy_file(MountDir / filePath, gameDir / filePath, fs::copy_options::overwrite_existing, ec)) {
+                        LOG_ERROR("Could not copy file %s, error %s", filePath.string().c_str(), ec.message().c_str());
                     }
                 }
                 goto continueFileLoop;

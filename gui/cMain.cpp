@@ -5,7 +5,7 @@
 
 #define LAUNCH_GAME_ARGS   "-AUTH_LOGIN=unused AUTH_TYPE=exchangecode -epicapp=Fortnite -epicenv=Prod -epicportal -epiclocale=en-us -AUTH_PASSWORD=%s %s"
 
-#define MOUNT_FOLDER	   "game"
+#define MOUNT_FOLDER	   "fn"
 
 #ifndef LOG_SECTION
 #define LOG_SECTION "cMain"
