@@ -13,7 +13,6 @@ aux_source_directory(web/manifest MANIFEST_FILE_SOURCES)
 aux_source_directory(web/http HTTP_FILE_SOURCES)
 aux_source_directory(checks CHECKS_FILE_SOURCES)
 aux_source_directory(gui INTERFACE_FILE_SOURCES)
-aux_source_directory(libraries/wintoast WINTOAST_FILE_SOURCES)
 aux_source_directory(libraries/curlion CURLION_FILE_SOURCES)
 
 aux_source_directory(localetool LOCALETOOL_FILE_SOURCES)
@@ -21,7 +20,6 @@ aux_source_directory(localetool LOCALETOOL_FILE_SOURCES)
 add_executable(EGL2 WIN32
         ${INTERFACE_FILE_SOURCES}
         "resources.rc"
-        ${WINTOAST_FILE_SOURCES}
         ${CURLION_FILE_SOURCES}
         ${FILESYSTEM_FILE_SOURCES}
         ${STORAGE_FILE_SOURCES}
@@ -88,7 +86,7 @@ foreach(CompilerFlag ${CompilerFlags})
 endforeach()
 
 target_link_options(EGL2 PRIVATE "/DELAYLOAD:winfsp-x64.dll")
-target_include_directories(EGL2 PRIVATE "$ENV{ProgramFiles\(x86\)}\\WinFsp\\inc" ${Boost_LIBRARIES} ${RAPIDJSON_INCLUDE_DIRS} "libraries\\libdeflate" "libraries\\wintoast" "libraries\\curlion")
+target_include_directories(EGL2 PRIVATE "$ENV{ProgramFiles\(x86\)}\\WinFsp\\inc" ${Boost_LIBRARIES} ${RAPIDJSON_INCLUDE_DIRS} "libraries\\libdeflate" "libraries\\curlion")
 target_link_libraries(EGL2 PRIVATE "$ENV{ProgramFiles\(x86\)}\\WinFsp\\lib\\winfsp-x64.lib" ${wxWidgets_LIBRARIES} CURL::libcurl OpenSSL::Crypto Crypt32 libzstd lz4::lz4 delayimp "${CMAKE_CURRENT_SOURCE_DIR}\\libraries\\libdeflate\\libdeflatestatic.lib")
 
 target_link_libraries(LocaleTool PRIVATE libzstd)

@@ -100,6 +100,9 @@ void Stats::StartUpdateThread(ch::milliseconds refreshRate, std::function<void(S
 			prevLatOp = latOp;
 			prevLatNs = latNs;
 
+			if (UpdateFlag.cancelled()) {
+				return;
+			}
 			updateCallback(updateData);
 
 			std::this_thread::sleep_for(refreshRate);

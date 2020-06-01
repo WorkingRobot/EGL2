@@ -7,6 +7,7 @@
 #include "UpdateChecker.h"
 #include "settings.h"
 
+#include <wx/taskbar.h>
 #include <wx/wx.h>
 
 #include <memory>
@@ -21,6 +22,7 @@ public:
 protected:
 	wxPanel* panel = nullptr;
 
+	wxButton* verifyBtn = nullptr;
 	wxButton* playBtn = nullptr;
 
 	wxStaticBoxSizer* descBox = nullptr;
@@ -53,7 +55,7 @@ protected:
 	void OnVerifyClicked();
 	void OnPlayClicked();
 	
-	void OnClose(wxCloseEvent& evt);
+	bool OnClose();
 
 	void SetStatus(const wxString& string);
 
@@ -62,6 +64,10 @@ protected:
 
 private:
 	void Mount(const std::string& Url);
+
+	wxTaskBarIcon* Systray;
+
+	wxTopLevelWindow* CurrentModal = nullptr;
 
 	bool FirstAuthLaunched = false;
 	std::shared_ptr<PersonalAuth> Auth;
@@ -74,5 +80,7 @@ private:
 
 	std::unique_ptr<UpdateChecker> Checker;
 	std::unique_ptr<MountedBuild> Build;
+
+	friend class SystrayIcon;
 };
 

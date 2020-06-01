@@ -8,13 +8,14 @@
 #include <wx/filepicker.h>
 #include <wx/wx.h>
 
-class cSetup : public wxModalWindow
+class cSetup : public wxFrame
 {
 public:
 	using flush_callback = std::function<void(SETTINGS*)>;
 	using validate_callback = std::function<bool(SETTINGS*)>;
+	using exit_callback = std::function<void()>;
 
-	cSetup(cMain* main, SETTINGS* settings, bool startupInvalid, flush_callback callback, validate_callback validator);
+	cSetup(cMain* main, SETTINGS* settings, bool startupInvalid, flush_callback callback, validate_callback validator, exit_callback onExit);
 	~cSetup();
 
 private:
@@ -26,6 +27,9 @@ private:
 	SETTINGS OldSettings;
 	flush_callback Callback;
 	validate_callback Validator;
+	exit_callback OnExit;
+
+	wxWindowDisabler* Disabler;
 
 	void ReadConfig();
 	void WriteConfig();

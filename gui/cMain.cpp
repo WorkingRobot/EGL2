@@ -18,11 +18,13 @@
 #include "cProgress.h"
 #include "cSetup.h"
 #include "Localization.h"
+#include "taskbar.h"
 
 #include <atomic>
 #include <thread>
 #include <TlHelp32.h>
 #include <wx/gbsizer.h>
+#include <wx/notifmsg.h>
 #include <wx/windowptr.h>
 
 #define SIDE_BUTTON_CREATE(name, text) \
@@ -65,9 +67,14 @@ cMain::cMain(const fs::path& settingsPath, const fs::path& manifestPath, const s
 	Auth(personalAuth),
 	UpdateAvailable(false) {
 	LOG_DEBUG("Setting up (%s, %s)", settingsPath.string().c_str(), manifestPath.string().c_str());
+
 	this->SetIcon(wxICON(APP_ICON));
 	this->SetMinSize(wxSize(CMAIN_W, CMAIN_H));
 	this->SetMaxSize(wxSize(CMAIN_W, CMAIN_H));
+
+	Systray = new SystrayIcon(this);
+	Systray->SetIcon(wxICON(APP_ICON), "EGL2");
+	wxNotificationMessage::UseTaskBarIcon(Systray);
 
 	LOG_DEBUG("Setting up UI");
 
@@ -84,6 +91,7 @@ cMain::cMain(const fs::path& settingsPath, const fs::path& manifestPath, const s
 	SIDE_BUTTON_BIND(verify, std::bind(&cMain::OnVerifyClicked, this));
 	SIDE_BUTTON_BIND(play, std::bind(&cMain::OnPlayClicked, this));
 	this->playBtn = SIDE_BUTTON_OBJ(play);
+	this->verifyBtn = SIDE_BUTTON_OBJ(verify);
 
 	SIDE_BUTTON_OBJ(verify)->Disable();
 	SIDE_BUTTON_OBJ(play)->Disable();
@@ -206,7 +214,9 @@ cMain::cMain(const fs::path& settingsPath, const fs::path& manifestPath, const s
 		STAT_TEXT(threads)->SetLabel(wxString::Format("%d", data.threads));
 	});
 
-	Bind(wxEVT_CLOSE_WINDOW, &cMain::OnClose, this);
+	Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& evt) {
+		this->Hide();
+	});
 
 	std::thread([=]() {
 		SetStatus(LSTR(MAIN_STATUS_STARTING));
@@ -234,7 +244,7 @@ cMain::~cMain() {
 }
 
 void cMain::OnButtonHover(const wxString& string) {
-	if (strcmp(descTxt->GetLabel().c_str(), string.c_str())) {
+	if (descTxt->GetLabel().compare(string)) {
 		descTxt->SetLabel(string);
 		descBox->Fit(descTxt);
 		descBox->FitInside(descTxt);
@@ -243,18 +253,29 @@ void cMain::OnButtonHover(const wxString& string) {
 }
 
 void cMain::OnSettingsClicked(bool onStartup) {
-	cSetup(this, &Settings, onStartup, [this](SETTINGS* settings) {
-		auto settingsFp = fopen(SettingsPath.string().c_str(), "wb");
-		if (settingsFp) {
-			SettingsWrite(settings, settingsFp);
-			fclose(settingsFp);
-		}
-		else {
-			LOG_ERROR("Could not open settings file to write");
-		}
-	}, &SettingsValidate).ShowModal();
-	if (Checker) {
-		Checker->SetInterval(SettingsGetUpdateInterval(&Settings));
+	if (!CurrentModal) {
+		CurrentModal = new cSetup(this, &Settings, onStartup, [this](SETTINGS* settings) {
+			auto settingsFp = fopen(SettingsPath.string().c_str(), "wb");
+			if (settingsFp) {
+				SettingsWrite(settings, settingsFp);
+				fclose(settingsFp);
+			}
+			else {
+				LOG_ERROR("Could not open settings file to write");
+			}
+		}, &SettingsValidate, [this]() {
+			if (Checker) {
+				Checker->SetInterval(SettingsGetUpdateInterval(&Settings));
+			}
+			CurrentModal = nullptr;
+			this->Raise();
+			this->SetFocus();
+		});
+	}
+	else {
+		CurrentModal->Restore();
+		CurrentModal->Raise();
+		CurrentModal->SetFocus();
 	}
 }
 
@@ -263,6 +284,7 @@ void cMain::OnSettingsClicked(bool onStartup) {
 	auto cancelled = new cancel_flag();						 \
 	cProgress* progress = new cProgress(this, taskName,		 \
 		*cancelled);										 \
+	CurrentModal = progress;								 \
 	progress->Show(true);									 \
 														 	 \
 	wxWindowPtr progressPtr(progress);				 		 \
@@ -275,11 +297,21 @@ void cMain::OnSettingsClicked(bool onStartup) {
 		progressPtr->Finish();								 \
 		progressPtr->Close();								 \
 		delete cancelled;									 \
+		CurrentModal = nullptr;								 \
+		this->Raise();										 \
+		this->SetFocus();									 \
 	}).detach();											 \
 }
 
 void cMain::OnVerifyClicked() {
-	RUN_PROGRESS(LSTR(MAIN_PROG_VERIFY), VerifyAllChunks, Settings.ThreadCount);
+	if (!CurrentModal) {
+		RUN_PROGRESS(LSTR(MAIN_PROG_VERIFY), VerifyAllChunks, Settings.ThreadCount);
+	}
+	else {
+		CurrentModal->Restore();
+		CurrentModal->Raise();
+		CurrentModal->SetFocus();
+	}
 }
 
 void cMain::OnPlayClicked() {
@@ -310,9 +342,9 @@ void cMain::OnPlayClicked() {
 	}
 }
 
-void cMain::OnClose(wxCloseEvent& evt)
+bool cMain::OnClose()
 {
-	if (evt.CanVeto() && Build) {
+	if (Build) {
 		bool gameRunning = false;
 		{
 			auto procId = GetCurrentProcessId();
@@ -335,11 +367,10 @@ void cMain::OnClose(wxCloseEvent& evt)
 		}
 		if (gameRunning && wxMessageBox(LSTR(MAIN_EXIT_VETOMSG), LTITLE(LSTR(MAIN_EXIT_VETOTITLE)), wxICON_QUESTION | wxYES_NO) != wxYES)
 		{
-			evt.Veto();
-			return;
+			return false;
 		}
 	}
-	Destroy();
+	return true;
 }
 
 void cMain::SetStatus(const wxString& string) {
@@ -354,25 +385,25 @@ void cMain::OnUpdate(const std::string& Version, const std::optional<std::string
 		UpdateUrl = Url;
 	}
 
-	WinToastTemplate templ = WinToastTemplate(WinToastTemplate::Text02);
-	templ.setTextField(wxString(LSTR(MAIN_NOTIF_TITLE)), WinToastTemplate::FirstLine);
-	templ.setTextField(wxString::Format(LSTR(MAIN_NOTIF_DESC), UpdateChecker::GetReadableVersion(Version)), WinToastTemplate::SecondLine);
-	templ.addAction(wxString(LSTR(MAIN_NOTIF_ACTION)));
-
-	WinToast::WinToastError error;
-	if (!WinToast::instance()->showToast(templ, std::make_shared<ToastHandler>(
-		[=](int ind) {
-			this->BeginUpdate();
-		},
-		[](IWinToastHandler::WinToastDismissalReason s) {
-
-		}), &error)) {
-		LOG_ERROR("Couldn't launch toast notification: %d", error);
+	auto notif = new wxNotificationMessage(LSTR(MAIN_NOTIF_TITLE), wxString::Format(LSTR(MAIN_NOTIF_DESC), UpdateChecker::GetReadableVersion(Version)), this);
+	notif->SetIcon(wxICON(APP_ICON));
+	notif->AddAction(wxID_ANY, LSTR(MAIN_NOTIF_ACTION));
+	notif->Bind(wxEVT_NOTIFICATION_MESSAGE_ACTION, std::bind(&cMain::BeginUpdate, this));
+	notif->Bind(wxEVT_NOTIFICATION_MESSAGE_CLICK, std::bind(&cMain::BeginUpdate, this));
+	if (!notif->Show(wxNotificationMessage::Timeout_Never)) {
+		LOG_ERROR("Couldn't launch update notification");
 	}
 }
 
 void cMain::BeginUpdate()
 {
+	if (CurrentModal) {
+		CurrentModal->Restore();
+		CurrentModal->Raise();
+		CurrentModal->SetFocus();
+		return;
+	}
+
 	if (!UpdateAvailable) {
 		return;
 	}

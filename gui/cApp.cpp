@@ -11,50 +11,70 @@
 
 #include <ShlObj_core.h>
 #include <sstream>
-#include <wintoastlib.h>
-
-using namespace WinToastLib;
+#include <wx/notifmsg.h>
 
 #define MESSAGE_ERROR(format, ...) wxMessageBox(wxString::Format(LSTR(format), __VA_ARGS__), LTITLE(LSTR(APP_ERROR)), wxICON_ERROR | wxOK | wxCENTRE)
 
 cApp::cApp() {
+
+}
+
+cApp::~cApp() {
+	LOG_INFO("Deconst cApp");
+	if (LogFile) {
+		fclose(LogFile);
+	}
+}
+
+bool cApp::OnInit() {
+	Logger::Setup();
+
+	LOG_INFO("Loading locales");
 	if (!Localization::InitializeLocales()) {
 		wxMessageBox("Could not load locale data!", LTITLE("Error"), wxICON_ERROR | wxOK | wxCENTRE);
-		exit(0);
-		return;
+		return false;
+	}
+	LOG_DEBUG("Loaded locales");
+
+	LOG_INFO("Checking for EGL2 instance");
+	InstanceChecker = new wxSingleInstanceChecker();
+	if (InstanceChecker->Create("EGL2Instance")) {
+		if (InstanceChecker->IsAnotherRunning()) {
+			MESSAGE_ERROR(APP_ERROR_RUNNING);
+			return false;
+		}
+		LOG_DEBUG("EGL2 was not running");
+	}
+	else {
+		LOG_WARN("Failed to create mutex, another instance may be running");
 	}
 
-	const char* SetupError = nullptr;
+	LOG_INFO("Loading data dirs");
 	fs::path LogPath;
 	{
 		PWSTR appDataFolder;
 		if (SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &appDataFolder) != S_OK) {
 			MESSAGE_ERROR(APP_ERROR_APPDATA);
-			exit(0);
-			return;
+			return false;
 		}
-		DataFolder = appDataFolder;
+		DataFolder = fs::path(appDataFolder) / "EGL2";
 		CoTaskMemFree(appDataFolder);
 	}
-	DataFolder /= "EGL2";
 	if (!fs::create_directories(DataFolder) && !fs::is_directory(DataFolder)) {
 		MESSAGE_ERROR(APP_ERROR_DATA);
-		exit(0);
-		return;
+		return false;
 	}
-
 	if (!fs::create_directories(DataFolder / "logs") && !fs::is_directory(DataFolder / "logs")) {
 		MESSAGE_ERROR(APP_ERROR_LOGS);
-		exit(0);
-		return;
+		return false;
 	}
-
 	if (!fs::create_directories(DataFolder / "manifests") && !fs::is_directory(DataFolder / "manifests")) {
 		MESSAGE_ERROR(APP_ERROR_MANIFESTS);
-		exit(0);
-		return;
+		return false;
 	}
+	LOG_DEBUG("Loaded data dirs");
 
+	LOG_INFO("Creating file logger");
 	{
 		auto logTime = std::time(nullptr);
 		std::stringstream ss;
@@ -63,8 +83,6 @@ cApp::cApp() {
 		std::replace(s.begin(), s.end(), ':', '-');
 		LogPath = DataFolder / "logs" / s;
 	}
-
-	Logger::Setup();
 
 	LogFile = fopen(LogPath.string().c_str(), "w");
 	if (!LogFile) {
@@ -77,16 +95,8 @@ cApp::cApp() {
 			fflush(LogFile);
 		};
 	}
+	LOG_DEBUG("Created file logger");
 
-	LOG_INFO("Starting cApp");
-}
-
-cApp::~cApp() {
-	LOG_INFO("Deconst cApp");
-	fclose(LogFile);
-}
-
-bool cApp::OnInit() {
 	LOG_INFO("Loading WinFsp");
 	auto result = LoadWinFsp();
 	if (result != WinFspCheckResult::LOADED) {
@@ -110,19 +120,11 @@ bool cApp::OnInit() {
 	}
 	LOG_DEBUG("Loaded WinFsp");
 
-	LOG_INFO("Setting up WinToast");
-	if (!WinToast::isCompatible()) {
-		LOG_FATAL("WinToast isn't compatible");
-		return false;
+	LOG_INFO("Setting up notifications");
+	if (!wxNotificationMessage::MSWUseToasts("EGL2", "workingrobot.egl2")) {
+		LOG_ERROR("Could not setup toasts, maybe you're using Windows 7 (if so, ignore this error)");
 	}
-	LOG_DEBUG("Configuring WinToast");
-	WinToast::instance()->setAppName(L"EGL2");
-	WinToast::instance()->setAppUserModelId(WinToast::configureAUMI(L"workingrobot", L"egl2"));
-	if (!WinToast::instance()->initialize()) {
-		LOG_FATAL("Could not intialize WinToast");
-		return false;
-	}
-	LOG_DEBUG("Set up WinToast");
+	LOG_DEBUG("Set up notfications");
 
 	LOG_INFO("Setting up symlink workaround");
 	if (!IsDeveloperModeEnabled()) {

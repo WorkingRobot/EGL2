@@ -4,6 +4,7 @@
 #include "cMain.h"
 
 #include <memory>
+#include <wx/snglinst.h>
 #include <wx/wx.h>
 
 class cApp : public wxApp
@@ -15,8 +16,9 @@ public:
 	virtual bool OnInit();
 
 	fs::path DataFolder;
-	FILE* LogFile;
+	FILE* LogFile = nullptr;
 
+	wxSingleInstanceChecker* InstanceChecker = nullptr;
 	std::shared_ptr<PersonalAuth> AuthDetails;
 };
 

@@ -120,12 +120,13 @@ inline const wxArrayString GetChoices(Params... params) {
 	return wxArrayStringsAdapter(std::vector<wxString> { params... }).AsArrayString();
 }
 
-cSetup::cSetup(cMain* main, SETTINGS* settings, bool startupInvalid, cSetup::flush_callback callback, cSetup::validate_callback validator) : wxModalWindow(main, wxID_ANY, LTITLE(LSTR(SETUP_TITLE)), wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)),
+cSetup::cSetup(cMain* main, SETTINGS* settings, bool startupInvalid, cSetup::flush_callback callback, cSetup::validate_callback validator, cSetup::exit_callback onExit) : wxFrame(main, wxID_ANY, LTITLE(LSTR(SETUP_TITLE)), wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)),
 	Settings(settings),
 	OldSettings(*settings),
 	InvalidStartup(startupInvalid),
 	Callback(callback),
-	Validator(validator) {
+	Validator(validator),
+	OnExit(onExit) {
 	this->SetIcon(wxICON(APP_ICON));
 	this->SetMinSize(wxSize(500, -1));
 	this->SetMaxSize(wxSize(500, -1));
@@ -189,8 +190,11 @@ cSetup::cSetup(cMain* main, SETTINGS* settings, bool startupInvalid, cSetup::flu
 
 	panel->SetSizerAndFit(mainSizer);
 	this->Fit();
+	this->Show();
 
-	wxToolTip::SetAutoPop(15000);
+	Disabler = new wxWindowDisabler(this);
+
+	wxToolTip::SetAutoPop(10000);
 
 	ReadConfig();
 
@@ -198,7 +202,7 @@ cSetup::cSetup(cMain* main, SETTINGS* settings, bool startupInvalid, cSetup::flu
 }
 
 cSetup::~cSetup() {
-
+	delete Disabler;
 }
 
 void cSetup::ReadConfig() {
@@ -218,6 +222,7 @@ void cSetup::OkClicked()
 	WriteConfig();
 	if (Validator(Settings)) { // New values are valid
 		Callback(Settings);
+		OnExit();
 		this->Destroy();
 	}
 }
@@ -225,10 +230,12 @@ void cSetup::OkClicked()
 void cSetup::CancelClicked()
 {
 	if (InvalidStartup) {
+		OnExit();
 		this->Destroy();
 	}
 	else if (Validator(&OldSettings)) { // Old values are valid, it's fine to throw out the current values
 		*Settings = OldSettings;
+		OnExit();
 		this->Destroy();
 	}
 }
@@ -245,6 +252,7 @@ void cSetup::CloseClicked(wxCloseEvent& evt)
 {
 	if (Validator(&OldSettings)) { // Old values are valid, it's fine to throw out the current values
 		*Settings = OldSettings;
+		OnExit();
 		this->Destroy();
 	}
 	else {
@@ -252,6 +260,7 @@ void cSetup::CloseClicked(wxCloseEvent& evt)
 			evt.Veto();
 		}
 		else {
+			OnExit();
 			this->Destroy();
 		}
 	}
