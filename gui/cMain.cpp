@@ -1,6 +1,6 @@
-#include "cMain.h"
+﻿#include "cMain.h"
 
-#define CMAIN_W				450
+#define CMAIN_W				550
 #define CMAIN_H				330
 
 #define LAUNCH_GAME_ARGS   "-AUTH_LOGIN=unused AUTH_TYPE=exchangecode -epicapp=Fortnite -epicenv=Prod -epicportal -epiclocale=en-us -AUTH_PASSWORD=%s %s"
@@ -12,7 +12,6 @@
 #endif
 
 #include "../checks/symlink_workaround.h"
-#include "../checks/wintoast_handler.h"
 #include "../Logger.h"
 #include "../Stats.h"
 #include "cProgress.h"
@@ -45,8 +44,8 @@
 
 #define CREATE_STAT(name, displayName, range) \
 	stat##name##Label = new wxStaticText(panel, wxID_ANY, displayName, wxDefaultPosition, wxDefaultSize, wxALIGN_RIGHT); \
-	stat##name##Value = new wxGauge(panel, wxID_ANY, range, wxDefaultPosition, wxSize(70, -1)); \
-	stat##name##Text = new wxStaticText(panel, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(45, -1)); \
+	stat##name##Value = new wxGauge(panel, wxID_ANY, range, wxDefaultPosition, wxSize(100, -1)); \
+	stat##name##Text = new wxStaticText(panel, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(50, -1)); \
 	if (statColInd & 0x1) { \
 		statsSizerR->Add(stat##name##Label, wxGBPosition(statColInd / 2, 0), wxGBSpan(1, 1), wxEXPAND); \
 		statsSizerR->Add(stat##name##Value,      wxGBPosition(statColInd / 2, 1), wxGBSpan(1, 1), wxEXPAND); \

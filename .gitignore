@@ -3,3 +3,5 @@ out/
 
 cert.pfx
 cert.pwd
+# You can get the locales.dat by just running LocaleTool.exe anyway
+locales.dat

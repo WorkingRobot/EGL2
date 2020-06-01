@@ -7,17 +7,18 @@
 #include "../Logger.h"
 #include "../resources.h"
 
+#include <codecvt>
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <zstd.h>
 
-inline char* ReadString(char** bufPos) {
+inline wchar_t* ReadString(char** bufPos) {
     uint16_t size = *(uint16_t*)(*bufPos);
-    auto ret = new char[size + 1];
-    memcpy(ret, *bufPos + sizeof(uint16_t), size);
-    ret[size] = '\0';
-    *bufPos += sizeof(uint16_t) + size;
-    return ret;
+    auto buf = new wchar_t[size + 1];
+    memcpy(buf, *bufPos + sizeof(uint16_t), size * 2);
+    buf[size] = L'\0';
+    *bufPos += sizeof(uint16_t) + size * 2;
+    return buf;
 }
 
 bool Localization::InitializeLocales()
@@ -44,7 +45,6 @@ bool Localization::InitializeLocales()
         FreeResource(resData);
         return false;
     }
-    LOG_INFO("%u", *(uint32_t*)resPtr);
 
     auto locData = std::unique_ptr<char[]>(new char[*(uint32_t*)resPtr]);
     auto locSize = ZSTD_decompress(locData.get(), *(uint32_t*)resPtr, (char*)resPtr + sizeof(uint32_t), resSize - sizeof(uint32_t));
