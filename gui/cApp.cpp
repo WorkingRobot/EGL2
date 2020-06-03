@@ -28,6 +28,11 @@ cApp::~cApp() {
 
 bool cApp::OnInit() {
 	Logger::Setup();
+	std::ostringstream preLogStream;
+	Logger::Callback = [&preLogStream](Logger::LogLevel level, const char* section, const char* str) {
+		auto logString = wxString::Format("%s - %s: %s\n", Logger::LevelAsString(level), section, str);
+		preLogStream.write(logString.c_str(), logString.size());
+	};
 
 	LOG_INFO("Loading locales");
 	if (!Localization::InitializeLocales()) {
@@ -94,6 +99,9 @@ bool cApp::OnInit() {
 			fprintf(LogFile, "%s - %s: %s\n", Logger::LevelAsString(level), section, str);
 			fflush(LogFile);
 		};
+		auto preLogData = preLogStream.str();
+		fwrite(preLogData.c_str(), preLogData.size(), 1, LogFile);
+		preLogStream.clear();
 	}
 	LOG_DEBUG("Created file logger");
 
