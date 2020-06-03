@@ -6,6 +6,7 @@
 
 #include "../Logger.h"
 #include "../Stats.h"
+#include "EGSProvider.h"
 #include "sha.h"
 
 #include <libdeflate.h>
@@ -114,7 +115,7 @@ std::shared_ptr<char[]> Storage::GetChunk(std::shared_ptr<Chunk> Chunk)
 std::shared_ptr<char[]> Storage::GetChunkPart(ChunkPart& ChunkPart)
 {
     auto chunk = GetChunk(ChunkPart.Chunk);
-    if (ChunkPart.Offset == 0 && ChunkPart.Size == ChunkPart.Chunk->Size) {
+    if (ChunkPart.Offset == 0 && ChunkPart.Size == ChunkPart.Chunk->WindowSize) {
         return chunk;
     }
     else {
@@ -186,63 +187,70 @@ struct CDN_CHUNK_HEADER_V3 {
 
 Compressor::buffer_value Storage::DownloadChunk(std::shared_ptr<Chunk> Chunk)
 {
-    std::vector<char> chunkData;
-    {
-        auto chunkConn = Client::CreateConnection();
-        chunkConn->SetUrl(CloudDir + Chunk->GetUrl());
-        if (!Client::Execute(chunkConn)) {
+    std::shared_ptr<char[]> data;
+    size_t dataSize = Chunk->WindowSize;
+
+    if (EGSProvider::Available() && EGSProvider::IsChunkAvailable(Chunk)) {
+        data = EGSProvider::GetChunk(Chunk);
+    }
+    else {
+        std::vector<char> chunkData;
+        {
+            auto chunkConn = Client::CreateConnection();
+            chunkConn->SetUrl(CloudDir + Chunk->GetUrl());
+            if (!Client::Execute(chunkConn)) {
+                LOG_WARN("Retrying...");
+                return DownloadChunk(Chunk);
+            }
+
+            chunkData.reserve(chunkConn->GetResponseBody().size());
+            Stats::DownloadCount.fetch_add(chunkConn->GetResponseBody().size(), std::memory_order_relaxed);
+            std::copy(chunkConn->GetResponseBody().begin(), chunkConn->GetResponseBody().end(), std::back_inserter(chunkData));
+        }
+
+        size_t decompressedSize = 1024 * 1024;
+
+        auto headerv1 = *(CDN_CHUNK_HEADER*)chunkData.data();
+        auto chunkPos = sizeof(CDN_CHUNK_HEADER);
+        if (headerv1.Magic != CHUNK_HEADER_MAGIC) {
+            LOG_ERROR("Downloaded chunk (%s) magic invalid: %08X", Chunk->GetGuid(), headerv1.Magic);
             LOG_WARN("Retrying...");
             return DownloadChunk(Chunk);
         }
+        if (headerv1.Version >= 2) {
+            auto headerv2 = *(CDN_CHUNK_HEADER_V2*)(chunkData.data() + chunkPos);
+            chunkPos += sizeof(CDN_CHUNK_HEADER_V2);
+            if (headerv1.Version >= 3) {
+                auto headerv3 = *(CDN_CHUNK_HEADER_V3*)(chunkData.data() + chunkPos);
+                decompressedSize = headerv3.DataSizeUncompressed;
 
-        chunkData.reserve(chunkConn->GetResponseBody().size());
-        Stats::DownloadCount.fetch_add(chunkConn->GetResponseBody().size(), std::memory_order_relaxed);
-        std::copy(chunkConn->GetResponseBody().begin(), chunkConn->GetResponseBody().end(), std::back_inserter(chunkData));
-    }
-
-    size_t decompressedSize = 1024 * 1024;
-
-    auto headerv1 = *(CDN_CHUNK_HEADER*)chunkData.data();
-    auto chunkPos = sizeof(CDN_CHUNK_HEADER);
-    if (headerv1.Magic != CHUNK_HEADER_MAGIC) {
-        LOG_ERROR("Downloaded chunk (%s) magic invalid: %08X", Chunk->GetGuid(), headerv1.Magic);
-        LOG_WARN("Retrying...");
-        return DownloadChunk(Chunk);
-    }
-    if (headerv1.Version >= 2) {
-        auto headerv2 = *(CDN_CHUNK_HEADER_V2*)(chunkData.data() + chunkPos);
-        chunkPos += sizeof(CDN_CHUNK_HEADER_V2);
-        if (headerv1.Version >= 3) {
-            auto headerv3 = *(CDN_CHUNK_HEADER_V3*)(chunkData.data() + chunkPos);
-            decompressedSize = headerv3.DataSizeUncompressed;
-
-            if (headerv1.Version > 3) { // version past 3
-                chunkPos = headerv1.HeaderSize;
+                if (headerv1.Version > 3) { // version past 3
+                    chunkPos = headerv1.HeaderSize;
+                }
             }
         }
-    }
 
-    if (headerv1.StoredAs & 0x02) // encrypted
-    {
-        LOG_ERROR("Downloaded chunk (%s) is encrypted", Chunk->GetGuid());
-        //return; // no support yet, i have never seen this used in practice
-    }
+        if (headerv1.StoredAs & 0x02) // encrypted
+        {
+            LOG_ERROR("Downloaded chunk (%s) is encrypted", Chunk->GetGuid());
+            //return; // no support yet, i have never seen this used in practice
+        }
 
-    auto guidPath = CachePath / Chunk->GetFilePath();
-    auto bufferPtr = chunkData.data() + chunkPos;
+        auto bufferPtr = chunkData.data() + chunkPos;
 
-    auto data = std::shared_ptr<char[]>(new char[decompressedSize]);
-    if (headerv1.StoredAs & 0x01) // compressed
-    {
-        auto decompressor = libdeflate_alloc_decompressor(); // TODO: use ctxmanager for this
-        auto result = libdeflate_zlib_decompress(decompressor, bufferPtr, headerv1.DataSizeCompressed, data.get(), decompressedSize, NULL);
-        libdeflate_free_decompressor(decompressor);
+        data = std::shared_ptr<char[]>(new char[decompressedSize]);
+        if (headerv1.StoredAs & 0x01) // compressed
+        {
+            auto decompressor = libdeflate_alloc_decompressor(); // TODO: use ctxmanager for this
+            auto result = libdeflate_zlib_decompress(decompressor, bufferPtr, headerv1.DataSizeCompressed, data.get(), decompressedSize, NULL);
+            libdeflate_free_decompressor(decompressor);
+        }
+        else {
+            memcpy(data.get(), bufferPtr, decompressedSize);
+        }
     }
-    else {
-        memcpy(data.get(), bufferPtr, decompressedSize);
-    }
-    WriteChunk(guidPath, decompressedSize, Compressor.StorageCompress(data, decompressedSize));
-    return std::make_pair(data, decompressedSize);
+    WriteChunk(CachePath / Chunk->GetFilePath(), dataSize, Compressor.StorageCompress(data, dataSize));
+    return std::make_pair(data, dataSize);
 }
 
 bool Storage::ReadChunk(fs::path Path, Compressor::buffer_value& ReadBuffer)

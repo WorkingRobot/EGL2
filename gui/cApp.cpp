@@ -7,6 +7,7 @@
 #include "../checks/symlink_workaround.h"
 #include "../checks/winfspcheck.h"
 #include "../Logger.h"
+#include "../storage/EGSProvider.h"
 #include "Localization.h"
 
 #include <ShlObj_core.h>
@@ -151,9 +152,13 @@ bool cApp::OnInit() {
 		}
 		else {
 			EnableDeveloperMode();
-			LOG_DEBUG("Set up developer mode");
+			LOG_INFO("Set up developer mode");
 		}
 	}
+	LOG_DEBUG("Set up workaround");
+
+	LOG_INFO("Checking for existing EGS install");
+	EGSProvider::Available();
 
 	LOG_INFO("Setting up auth");
 	AuthDetails = std::make_shared<PersonalAuth>(DataFolder / "auth", [](const std::string& verifUrl, const std::string& userCode) {

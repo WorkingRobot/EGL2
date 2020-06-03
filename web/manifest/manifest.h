@@ -9,6 +9,7 @@
 struct Manifest {
 public:
 	Manifest(const rapidjson::Document& jsonData, const std::string& url);
+	Manifest(FILE* binaryData);
 	~Manifest();
 
 	uint64_t GetDownloadSize();
