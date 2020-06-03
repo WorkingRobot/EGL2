@@ -85,6 +85,7 @@
     LS(FI)      /* Finnish              */ \
     LS(FR)      /* French               */ \
     LS(IT)      /* Italian              */ \
+    LS(JA)      /* Japanese             */ \
     LS(PL)      /* Polish               */ \
     LS(PT_BR)   /* Brazilian Portuguese */ \
     LS(RU)      /* Russian              */ \
@@ -128,7 +129,7 @@ public:
     }
 
 private:
-    static inline Locale SelectedLocale = Locale::RU;
+    static inline Locale SelectedLocale = Locale::EN;
 
     static inline std::unique_ptr<wchar_t[]> LocaleStrings[(int)Locale::Count][(int)LocaleString::Count];
 };

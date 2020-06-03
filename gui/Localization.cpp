@@ -100,6 +100,8 @@ Locale Localization::GetSystemLocale()
         return Locale::FR;
     case 0x10:
         return Locale::IT;
+    case 0x11:
+        return Locale::JA;
     case 0x15:
         return Locale::PL;
     case 0x16:
