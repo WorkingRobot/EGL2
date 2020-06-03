@@ -117,7 +117,9 @@ public:
 
     static bool InitializeLocales();
 
-    static inline void LoadLocale(Locale locale) {
+    static Locale GetSystemLocale();
+
+    static inline void UseLocale(Locale locale) {
         SelectedLocale = locale;
     }
 

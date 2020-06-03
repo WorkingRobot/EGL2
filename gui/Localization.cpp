@@ -69,3 +69,47 @@ bool Localization::InitializeLocales()
     FreeResource(resData);
     return true;
 }
+
+inline void SplitLCID(LCID lcid, uint8_t& sortId, uint16_t& languageId) {
+    sortId = (lcid >> 16) & 0xF;
+    languageId = lcid & 0xFFFF;
+}
+
+Locale Localization::GetSystemLocale()
+{
+    uint8_t sortId;
+    // language ids contain 2 bytes
+    // the first is the language byte (the actual language: en, fr, es, ar, etc.)
+    // the second is the region byte (only unique to the language, one doesn't always correspond to the same region)
+    // a region of 0x40 is not specifically US (only in en-US)
+    uint16_t langId;
+    SplitLCID(GetUserDefaultLCID(), sortId, langId);
+    switch (langId & 0xFF)
+    {
+    case 0x01:
+        return Locale::AR;
+    case 0x07:
+        return Locale::DE;
+    case 0x09:
+        return Locale::EN;
+    case 0x0A:
+        return Locale::ES;
+    case 0x0B:
+        return Locale::FI;
+    case 0x0C:
+        return Locale::FR;
+    case 0x10:
+        return Locale::IT;
+    case 0x15:
+        return Locale::PL;
+    case 0x16:
+        return Locale::PT_BR; // just treat it as normal portuguese (should be similar enough I hope)
+    case 0x19:
+        return Locale::RU;
+    case 0x1F:
+        return Locale::TR;
+    default:
+        LOG_WARN("Using default locale for %02X\n", langId & 0xFF);
+        return Locale::EN;
+    }
+}
