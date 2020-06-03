@@ -167,7 +167,7 @@ bool cApp::OnInit() {
 	});
 
 	LOG_INFO("Setting up cMain");
-	(new cMain(DataFolder / "config", DataFolder / "manifests", AuthDetails))->Show();
+	(new cMain(this, DataFolder / "config", DataFolder / "manifests", AuthDetails))->Show();
 
 	LOG_DEBUG("Set up cApp");
 	return true;

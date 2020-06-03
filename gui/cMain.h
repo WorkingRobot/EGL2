@@ -16,7 +16,7 @@
 class cMain : public wxFrame
 {
 public:
-	cMain(const fs::path& settingsPath, const fs::path& manifestPath, const std::shared_ptr<PersonalAuth>& personalAuth);
+	cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestPath, const std::shared_ptr<PersonalAuth>& personalAuth);
 	~cMain();
 
 protected:
@@ -65,8 +65,8 @@ protected:
 private:
 	void Mount(const std::string& Url);
 
+	wxApp* App;
 	wxTaskBarIcon* Systray;
-
 	wxTopLevelWindow* CurrentModal = nullptr;
 
 	bool FirstAuthLaunched = false;

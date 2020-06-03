@@ -28,6 +28,11 @@ void UpdateChecker::SetInterval(std::chrono::milliseconds newInterval)
 	UpdateWakeup = std::chrono::steady_clock::time_point::min(); // force update
 }
 
+void UpdateChecker::StopUpdateThread()
+{
+	UpdateFlag.cancel();
+}
+
 bool UpdateChecker::ForceUpdate() {
 	auto info = Auth.GetLatestManifest();
 	auto id = Auth.GetManifestId(info.first);

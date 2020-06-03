@@ -60,7 +60,8 @@
 #define STAT_VALUE(name) stat##name##Value
 #define STAT_TEXT(name) stat##name##Text
 
-cMain::cMain(const fs::path& settingsPath, const fs::path& manifestPath, const std::shared_ptr<PersonalAuth>& personalAuth) : wxFrame(nullptr, wxID_ANY, "EGL2", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)),
+cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestPath, const std::shared_ptr<PersonalAuth>& personalAuth) : wxFrame(nullptr, wxID_ANY, "EGL2", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)),
+	App(app),
 	SettingsPath(settingsPath),
 	Settings(SettingsDefault()),
 	Auth(personalAuth),
@@ -211,6 +212,7 @@ cMain::cMain(const fs::path& settingsPath, const fs::path& manifestPath, const s
 		STAT_VALUE(threads)->SetValue(128);
 		STAT_VALUE(threads)->SetValue(std::min(data.threads, 128));
 		STAT_TEXT(threads)->SetLabel(wxString::Format("%d", data.threads));
+		return true;
 	});
 
 	Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& evt) {

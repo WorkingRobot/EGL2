@@ -45,8 +45,32 @@ public:
 		return wxString::Format("%.*f %s", 2 - (int)floor(log10(sizeD)), sizeD, suffix[i]);
 	}
 
-	static void StartUpdateThread(ch::milliseconds refreshRate, std::function<void(StatsUpdateData&)> updateCallback);
-	static void StopUpdateThread();
+	template<class Callback, class ...Args>
+	static inline void StartUpdateThread(ch::milliseconds refreshRate, Callback&& updateCallback, Args&&... args) {
+		if (ThreadRunning) {
+			return;
+		}
+		RefreshRate = refreshRate;
+
+		std::thread([=]() {
+			ThreadRunning = true;
+			while (!Flag.cancelled()) {
+				UpdateData();
+				if (Flag.cancelled()) {
+					break;
+				}
+				if (!updateCallback(Data, args...)) {
+					break;
+				}
+				std::this_thread::sleep_for(RefreshRate);
+			}
+			ThreadRunning = false;
+		}).detach();
+	}
+
+	static inline void StopUpdateThread() {
+		Flag.cancel();
+	}
 
 	static inline std::atomic_uint64_t ProvideCount = 0; // std::atomic_uint_fast64_t is the same in msvc
 	static inline std::atomic_uint64_t FileReadCount = 0;
@@ -56,6 +80,9 @@ public:
 	static inline std::atomic_uint64_t LatNsCount = 0;
 
 private:
-	static inline std::thread UpdateThread;
-	static inline cancel_flag UpdateFlag;
+	static inline StatsUpdateData Data;
+	static inline ch::milliseconds RefreshRate;
+	static inline bool ThreadRunning = false;
+	static inline cancel_flag Flag;
+	static void UpdateData();
 };

@@ -38,7 +38,10 @@ protected:
 				break;
 			case EXIT_ID:
 				if (Main->OnClose()) {
+					Stats::StopUpdateThread();
+					Main->Checker->StopUpdateThread();
 					Main->Destroy();
+					Main->App->Exit();
 				}
 				break;
 			}

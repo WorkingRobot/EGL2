@@ -18,6 +18,8 @@ public:
 
 	void SetInterval(std::chrono::milliseconds newInterval);
 
+	void StopUpdateThread();
+
 	bool ForceUpdate();
 
 	std::string& GetLatestId();
