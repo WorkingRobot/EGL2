@@ -130,12 +130,6 @@ bool cApp::OnInit() {
 	}
 	LOG_DEBUG("Loaded WinFsp");
 
-	LOG_INFO("Setting up notifications");
-	if (!wxNotificationMessage::MSWUseToasts("EGL2", "workingrobot.egl2")) {
-		LOG_ERROR("Could not setup toasts, maybe you're using Windows 7 (if so, ignore this error)");
-	}
-	LOG_DEBUG("Set up notfications");
-
 	LOG_INFO("Setting up symlink workaround");
 	if (!IsDeveloperModeEnabled()) {
 		if (!IsUserAdmin()) {
@@ -159,7 +153,7 @@ bool cApp::OnInit() {
 	LOG_DEBUG("Set up workaround");
 
 	LOG_INFO("Checking for existing EGS install");
-	EGSProvider::Available();
+	LOG_INFO("EGS is %savailable", EGSProvider::Available() ? "" : "not ");
 
 	LOG_INFO("Setting up auth");
 	AuthDetails = std::make_shared<PersonalAuth>(DataFolder / "auth", [](const std::string& verifUrl, const std::string& userCode) {
@@ -168,7 +162,7 @@ bool cApp::OnInit() {
 	});
 
 	LOG_INFO("Setting up cMain");
-	(new cMain(this, DataFolder / "config", DataFolder / "manifests", AuthDetails))->Show();
+	new cMain(this, DataFolder / "config", DataFolder / "manifests", AuthDetails);
 
 	LOG_DEBUG("Set up cApp");
 	return true;

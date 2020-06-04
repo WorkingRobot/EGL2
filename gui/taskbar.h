@@ -53,9 +53,12 @@ protected:
 
 		menu->AppendSeparator();
 
-		menu->Append(SETTINGS_ID, "Settings")->Enable(!Main->CurrentModal);
-		menu->Append(VERIFY_ID, "Verify")->Enable(!Main->CurrentModal && Main->verifyBtn->IsThisEnabled());
-		menu->Append(PLAY_ID, Main->playBtn->GetLabel())->Enable(!Main->CurrentModal && Main->playBtn->IsThisEnabled());
+		menu->Append(SETTINGS_ID, LSTR(MAIN_BTN_SETTINGS));
+		menu->Append(VERIFY_ID, LSTR(MAIN_BTN_VERIFY));
+		menu->Append(PLAY_ID, Main->playBtn->GetLabel());
+
+		menu->AppendSeparator();
+
 		menu->Append(EXIT_ID, "Exit");
 		return menu;
 	}

@@ -45,7 +45,7 @@ std::pair<std::string, std::string> ManifestAuth::GetLatestManifest()
 	manifestConn->AddRequestHeader("Authorization", authHeader.get());
 	manifestConn->AddRequestHeader("Content-Type", "application/json");
 
-	if (!Client::Execute(manifestConn, true)) {
+	if (!Client::Execute(manifestConn, cancel_flag(), true)) {
 		LOG_WARN("Retrying...");
 		return GetLatestManifest();
 	}
@@ -123,7 +123,7 @@ Manifest ManifestAuth::GetManifest(const std::string& Url)
 		auto manifestConn = Client::CreateConnection();
 		manifestConn->SetUrl(Url);
 
-		if (!Client::Execute(manifestConn)) {
+		if (!Client::Execute(manifestConn, cancel_flag())) {
 			LOG_WARN("Retrying...");
 			return GetManifest(Url);
 		}
@@ -168,7 +168,7 @@ void ManifestAuth::UpdateIfExpired(bool force)
 
 	tokenConn->SetRequestBody("grant_type=client_credentials");
 
-	if (!Client::Execute(tokenConn)) {
+	if (!Client::Execute(tokenConn, cancel_flag())) {
 		LOG_WARN("Retrying...");
 		return UpdateIfExpired(true);
 	}

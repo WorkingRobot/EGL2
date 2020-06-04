@@ -5,8 +5,11 @@
 #endif
 
 #include "../Logger.h"
+#include "../Stats.h"
 
 #include <filesystem>
+#include <fstream>
+#include <functional>
 #include <numeric>
 #include <rapidjson/document.h>
 #include <rapidjson/filereadstream.h>
@@ -16,12 +19,11 @@ namespace fs = std::filesystem;
 
 EGSProvider::EGSProvider()
 {
-	LOG_INFO("Checking for existing EGS install");
 	fs::path LauncherDat;
 	{
 		PWSTR progDataFolder;
 		if (SHGetKnownFolderPath(FOLDERID_ProgramData, 0, NULL, &progDataFolder) != S_OK) {
-			LOG_DEBUG("Can't get ProgramData folder");
+			LOG_ERROR("Can't get ProgramData folder");
 			return;
 		}
 		LauncherDat = fs::path(progDataFolder) / "Epic" / "UnrealEngineLauncher" / "LauncherInstalled.dat";
@@ -36,7 +38,7 @@ EGSProvider::EGSProvider()
 	{
 		auto launcherFp = fopen(LauncherDat.string().c_str(), "rb");
 		if (!launcherFp) {
-			LOG_DEBUG("Couldn't open install data file");
+			LOG_ERROR("Couldn't open install data file");
 			return;
 		}
 
@@ -62,7 +64,7 @@ EGSProvider::EGSProvider()
 	InstallDir = (*val)["InstallLocation"].GetString();
 	auto egsPath = InstallDir / ".egstore";
 	if (!fs::is_directory(egsPath)) {
-		LOG_DEBUG("Fortnite doesn't have a .egstore folder");
+		LOG_ERROR("Fortnite doesn't have a .egstore folder");
 		return;
 	}
 
@@ -74,17 +76,21 @@ EGSProvider::EGSProvider()
 		}
 	}
 	if (manifestPath.empty()) {
-		LOG_DEBUG("Fortnite doesn't have a version manifest attatched");
+		LOG_ERROR("Fortnite doesn't have a version manifest attatched");
 		return;
 	}
 
 	auto manifestFp = fopen(manifestPath.string().c_str(), "rb");
 	if (!manifestFp) {
-		LOG_DEBUG("Couldn't open manifest file");
+		LOG_ERROR("Couldn't open manifest file");
 		return;
 	}
 
 	Build = std::make_unique<Manifest>(manifestFp);
+	int i = 0;
+	for (auto c = Build->ChunkManifestList.begin(); c != Build->ChunkManifestList.end(); ++c) {
+		ChunkLookup[(*c)->Guid] = i++;
+	}
 }
 
 EGSProvider::~EGSProvider()
@@ -99,43 +105,78 @@ bool EGSProvider::available()
 bool EGSProvider::isChunkAvailable(std::shared_ptr<Chunk>& chunk)
 {
 	if (!available()) {
+		LOG_DEBUG("(CHUNK) Not available");
 		return false;
 	}
-	return std::any_of(Build->ChunkManifestList.begin(), Build->ChunkManifestList.end(), [&](std::shared_ptr<Chunk>& c) {
-		return !memcmp(chunk->Guid, c->Guid, 16);
-	});
+	return ChunkLookup.find(chunk->Guid) != ChunkLookup.end();
 }
+
+class ChunkSection {
+public:
+	ChunkSection(const File& f, size_t o, const ChunkPart& p) : file(f), offset(o), part(p) { }
+
+	inline uint32_t PartOffset() const {
+		return part.get().Offset;
+	}
+
+	inline uint32_t PartSize() const {
+		return part.get().Size;
+	}
+
+	inline size_t FileOffset() const {
+		return offset;
+	}
+
+	inline const std::string& FileName() const {
+		return file.get().FileName;
+	}
+
+private:
+	std::reference_wrapper<const File> file;
+	size_t offset;
+	std::reference_wrapper<const ChunkPart> part;
+
+};
 
 std::shared_ptr<char[]> EGSProvider::getChunk(std::shared_ptr<Chunk>& chunk)
 {
-	std::vector<std::pair<File&, std::vector<ChunkPart>::iterator>> parts;
+	std::vector<ChunkSection> parts;
 	for (auto& f : Build->FileManifestList) {
-		for (auto c = f.ChunkParts.begin(); c != f.ChunkParts.end(); ++c) {
-			if (!memcmp(chunk->Guid, c->Chunk->Guid, 16)) {
-				parts.emplace_back(f, c);
+		size_t offset = 0;
+		for (auto& c : f.ChunkParts) {
+			if (!memcmp(chunk->Guid, c.Chunk->Guid, 16)) {
+				parts.emplace_back(std::cref(f), offset, std::cref(c));
 			}
+			offset += c.Size;
 		}
 	}
-	std::sort(parts.begin(), parts.end(), [](std::pair<File&, std::vector<ChunkPart>::iterator>& a, std::pair<File&, std::vector<ChunkPart>::iterator>& b) {
-		return a.second->Offset > b.second->Offset;
+	std::sort(parts.begin(), parts.end(), [](ChunkSection& a, ChunkSection& b) {
+		return a.PartOffset() < b.PartOffset();
 	});
 
 	auto ret = std::shared_ptr<char[]>(new char[chunk->WindowSize]);
 	auto amtRead = 0;
 	for (auto& part : parts) {
-		if (amtRead < part.second->Offset) {
-			auto offset = std::accumulate(part.first.ChunkParts.begin(), part.second, (size_t)0, [](size_t offset, ChunkPart& part) {
-				return offset + part.Size;
-			});
-			auto fp = fopen((InstallDir / part.first.FileName).string().c_str(), "rb");
-			if (!fp) {
+		if (amtRead == part.PartOffset()) {
+			std::ifstream fp(InstallDir / part.FileName(), std::ios::in | std::ios::binary);
+			if (!fp.good()) {
+				LOG_ERROR("Couldn't open file (%s) to get %s", (InstallDir / part.FileName()).string().c_str(), chunk->GetGuid().c_str());
 				return nullptr;
 			}
-			fseek(fp, offset, SEEK_SET);
-			fread(ret.get() + amtRead, part.second->Size, 1, fp);
-			fclose(fp);
-			amtRead += part.second->Size;
+			fp.seekg(part.FileOffset(), std::ios::beg);
+			if (!fp.good()) {
+				LOG_ERROR("Couldn't seek in file (%s) to %zu to get %s", (InstallDir / part.FileName()).string().c_str(), part.FileOffset(), chunk->GetGuid().c_str());
+				return nullptr;
+			}
+			fp.read(ret.get() + amtRead, part.PartSize());
+			fp.close();
+			Stats::FileReadCount.fetch_add(part.PartSize(), std::memory_order_relaxed);
+			amtRead += part.PartSize();
 		}
+	}
+	if (amtRead != chunk->WindowSize) {
+		LOG_ERROR("Couldn't get entire chunk of %s", chunk->GetGuid().c_str());
+		return nullptr;
 	}
 	return ret;
 }

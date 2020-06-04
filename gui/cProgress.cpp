@@ -2,12 +2,11 @@
 
 #include "Localization.h"
 
-#include <chrono>
 #include <wx/appprogress.h>
+#include <utility>
 
-namespace ch = std::chrono;
-
-cProgress::cProgress(cMain* main, wxString taskName, cancel_flag& cancelFlag, float updateFreq, uint32_t maximum) : wxFrame(main, wxID_ANY, LTITLE(taskName), wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)) {
+cProgress::cProgress(wxWindow* main, wxString taskName, cancel_flag& cancelFlag, std::function<void()> onCancel, float updateFreq, uint32_t maximum) : wxFrame(main, wxID_ANY, LTITLE(taskName), wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)) {
+	OnCancel = onCancel;
 	value = 0;
 	frequency = updateFreq;
 	maxValue = maximum;
@@ -32,7 +31,6 @@ cProgress::cProgress(cMain* main, wxString taskName, cancel_flag& cancelFlag, fl
 
 	progressCancelBtn = new wxButton(panel, wxID_ANY, LSTR(PROG_BTN_CANCEL));
 	progressTaskbar = new wxAppProgressIndicator(this, maxValue);
-	progressDisabler = new wxWindowDisabler(this);
 
 	progressTextSizer = new wxGridSizer(2, 2, 5, 5);
 	progressTextSizer->Add(progressPercent, 1, wxEXPAND);
@@ -52,18 +50,20 @@ cProgress::cProgress(cMain* main, wxString taskName, cancel_flag& cancelFlag, fl
 	this->Fit();
 
 	progressCancelBtn->Bind(wxEVT_BUTTON, [this, &cancelFlag](wxCommandEvent& evt) { Cancel(cancelFlag); });
-	Bind(wxEVT_CLOSE_WINDOW, [this, &cancelFlag](wxCloseEvent& evt) { Cancel(cancelFlag); });
+	Bind(wxEVT_CLOSE_WINDOW, [this, &cancelFlag](wxCloseEvent& evt) { Cancel(cancelFlag); evt.Veto(); });
 }
 
 cProgress::~cProgress() {
 	delete progressTaskbar;
-	delete progressDisabler;
 }
 
 inline void cProgress::Cancel(cancel_flag& cancelFlag) {
 	cancelFlag.cancel();
 	progressCancelBtn->Disable();
 	progressCancelBtn->SetLabel(LSTR(PROG_BTN_CANCELLING));
+	Finish();
+	Hide();
+	OnCancel();
 }
 
 inline wxString FormatTime(ch::seconds secs) {

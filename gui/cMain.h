@@ -4,10 +4,13 @@
 #include "../MountedBuild.h"
 #include "../web/manifest/auth.h"
 #include "../web/personal/PersonalAuth.h"
+#include "cSetup.h"
+#include "cProgress.h"
 #include "UpdateChecker.h"
 #include "settings.h"
 
 #include <wx/taskbar.h>
+#include <wx/windowptr.h>
 #include <wx/wx.h>
 
 #include <memory>
@@ -65,9 +68,11 @@ protected:
 private:
 	void Mount(const std::string& Url);
 
-	wxApp* App;
-	wxTaskBarIcon* Systray;
-	wxTopLevelWindow* CurrentModal = nullptr;
+	wxWeakRef<wxApp> App;
+	wxSharedPtr<wxTaskBarIcon> Systray;
+	wxWindowPtr<cProgress> VerifyWnd;
+	wxWindowPtr<cProgress> UpdateWnd;
+	wxWindowPtr<cSetup> SetupWnd;
 
 	bool FirstAuthLaunched = false;
 	std::shared_ptr<PersonalAuth> Auth;

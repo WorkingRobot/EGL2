@@ -224,20 +224,24 @@ std::error_condition Client::AbortConnection(const std::shared_ptr<curlion::Conn
     return connection_manager->AbortConnection(connection);
 }
 
-bool Client::Execute(const std::shared_ptr<curlion::HttpConnection>& connection, bool allowNon200)
+bool Client::Execute(const std::shared_ptr<curlion::HttpConnection>& connection, cancel_flag& flag, bool allowNon200)
 {
     char errbuf[CURL_ERROR_SIZE];
     curl_easy_setopt(connection->GetHandle(), CURLOPT_ERRORBUFFER, errbuf);
 
     int retryCount = 5;
-    FILE* vFp;
+    FILE* vFp = nullptr;
     do {
         if (retryCount == 1) {
             connection->SetVerbose(true);
             vFp = CreateTempFile();
             curl_easy_setopt(connection->GetHandle(), CURLOPT_STDERR, vFp);
         }
+
+        SAFE_FLAG_RETURN(false);
         connection->Start();
+        SAFE_FLAG_RETURN(false);
+
         if (connection->GetResult() != CURLE_OK) {
             LOG_ERROR("Curl error %d: %s", connection->GetResult(),
                 strlen(errbuf) ?
@@ -248,9 +252,15 @@ bool Client::Execute(const std::shared_ptr<curlion::HttpConnection>& connection,
             LOG_ERROR("Response code was %d. Response data: %s", connection->GetResponseCode(), connection->GetResponseBody().c_str());
         }
         else {
+            if (vFp) {
+                fclose(vFp);
+            }
             return true;
         }
+
+        LOG_WARN("Retrying...");
     } while (--retryCount);
+
 
     auto vSize = ftell(vFp);
     auto vData = std::unique_ptr<char[]>(new char[vSize + 1]);

@@ -1,7 +1,6 @@
 #include "cSetup.h"
 
 #include "Localization.h"
-#include "settings.h"
 #include "wxLabelSlider.h"
 
 #include <wx/filepicker.h>
@@ -83,7 +82,7 @@ static const char* updateLevels[] = {
 
 #define ADD_ITEM_SLIDER(section, name, displayName, minValue, maxValue, under_type, binder) \
 	auto sectionLabel##name = new wxStaticText(panel, wxID_ANY, displayName); \
-	auto sectionValue##name = new wxSlider(panel, wxID_ANY, minValue, minValue, maxValue, wxDefaultPosition, wxDefaultSize, wxSL_HORIZONTAL | wxSL_LABELS | wxSL_AUTOTICKS); \
+	auto sectionValue##name = new wxSlider(panel, wxID_ANY, minValue, minValue, maxValue, wxDefaultPosition, wxDefaultSize, wxSL_HORIZONTAL | wxSL_LABELS); \
 	ReadBinds.emplace_back([sectionValue##name](SETTINGS* val) { \
 		sectionValue##name->SetValue((int)val->##binder); \
 	}); \
@@ -120,7 +119,7 @@ inline const wxArrayString GetChoices(Params... params) {
 	return wxArrayStringsAdapter(std::vector<wxString> { params... }).AsArrayString();
 }
 
-cSetup::cSetup(cMain* main, SETTINGS* settings, bool startupInvalid, cSetup::flush_callback callback, cSetup::validate_callback validator, cSetup::exit_callback onExit) : wxFrame(main, wxID_ANY, LTITLE(LSTR(SETUP_TITLE)), wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)),
+cSetup::cSetup(wxWindow* main, SETTINGS* settings, bool startupInvalid, cSetup::flush_callback callback, cSetup::validate_callback validator, cSetup::exit_callback onExit) : wxModalWindow(main, wxID_ANY, LTITLE(LSTR(SETUP_TITLE)), wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)),
 	Settings(settings),
 	OldSettings(*settings),
 	InvalidStartup(startupInvalid),
@@ -190,19 +189,19 @@ cSetup::cSetup(cMain* main, SETTINGS* settings, bool startupInvalid, cSetup::flu
 
 	panel->SetSizerAndFit(mainSizer);
 	this->Fit();
-	this->Show();
-
-	Disabler = new wxWindowDisabler(this);
-
-	wxToolTip::SetAutoPop(10000);
+	this->Show(true);
 
 	ReadConfig();
 
 	Bind(wxEVT_CLOSE_WINDOW, &cSetup::CloseClicked, this);
+
+	if (startupInvalid) {
+		this->ShowModal();
+	}
 }
 
 cSetup::~cSetup() {
-	delete Disabler;
+	
 }
 
 void cSetup::ReadConfig() {

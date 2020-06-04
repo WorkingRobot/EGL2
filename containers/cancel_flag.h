@@ -2,6 +2,8 @@
 
 #include <atomic>
 
+#define SAFE_FLAG_RETURN(value) if (flag.cancelled()) return value;
+
 class cancel_flag {
 public:
 	bool cancelled() {

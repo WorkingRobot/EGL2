@@ -34,10 +34,10 @@ bool Storage::IsChunkDownloaded(ChunkPart& ChunkPart)
     return IsChunkDownloaded(ChunkPart.Chunk);
 }
 
-bool Storage::VerifyChunk(std::shared_ptr<Chunk> Chunk)
+bool Storage::VerifyChunk(std::shared_ptr<Chunk> Chunk, cancel_flag& flag)
 {
     Compressor::buffer_value chunkData;
-    if (!ReadChunk(CachePath / Chunk->GetFilePath(), chunkData)) {
+    if (!ReadChunk(CachePath / Chunk->GetFilePath(), chunkData, flag)) {
         return false;
     }
     Stats::ProvideCount.fetch_add(chunkData.second, std::memory_order_relaxed);
@@ -49,18 +49,21 @@ void Storage::DeleteChunk(std::shared_ptr<Chunk> Chunk)
     fs::remove(CachePath / Chunk->GetFilePath());
 }
 
-std::shared_ptr<char[]> Storage::GetChunk(std::shared_ptr<Chunk> Chunk)
+std::shared_ptr<char[]> Storage::GetChunk(std::shared_ptr<Chunk> Chunk, cancel_flag& flag)
 {
     auto& data = GetPoolData(Chunk);
+    SAFE_FLAG_RETURN(nullptr);
     switch (data.Status)
     {
     case CHUNK_STATUS::Unavailable:
     redownloadChunk:
     {
+        SAFE_FLAG_RETURN(nullptr);
         // download
         data.Status = CHUNK_STATUS::Grabbing;
 
-        auto chunkData = DownloadChunk(Chunk);
+        auto chunkData = DownloadChunk(Chunk, flag);
+        if (chunkData.first)
         {
             std::unique_lock<std::mutex> lck(data.Mutex);
             data.Buffer = chunkData.first;
@@ -68,7 +71,9 @@ std::shared_ptr<char[]> Storage::GetChunk(std::shared_ptr<Chunk> Chunk)
             data.Status = CHUNK_STATUS::Readable;
             data.CV.notify_all();
         }
-
+        else {
+            data.Status = CHUNK_STATUS::Unavailable;
+        }
         break;
     }
     case CHUNK_STATUS::Available:
@@ -77,11 +82,23 @@ std::shared_ptr<char[]> Storage::GetChunk(std::shared_ptr<Chunk> Chunk)
         data.Status = CHUNK_STATUS::Reading;
 
         Compressor::buffer_value chunkData;
-
-        if (!ReadChunk(CachePath / Chunk->GetFilePath(), chunkData) || (Flags & StorageVerifyHashes && !VerifyHash(chunkData.first.get(), chunkData.second, Chunk->ShaHash))) {
+        if (!ReadChunk(CachePath / Chunk->GetFilePath(), chunkData, flag)) {
+            if (flag.cancelled()) {
+                data.Status = CHUNK_STATUS::Available;
+                break;
+            }
             DeleteChunk(Chunk);
-            data.Status = CHUNK_STATUS::Unavailable;
             goto redownloadChunk;
+        }
+        if (Flags & StorageVerifyHashes) {
+            if (!VerifyHash(chunkData.first.get(), chunkData.second, Chunk->ShaHash)) {
+                if (flag.cancelled()) {
+                    data.Status = CHUNK_STATUS::Available;
+                    break;
+                }
+                DeleteChunk(Chunk);
+                goto redownloadChunk;
+            }
         }
         
         {
@@ -94,10 +111,13 @@ std::shared_ptr<char[]> Storage::GetChunk(std::shared_ptr<Chunk> Chunk)
         break;
     }
     case CHUNK_STATUS::Grabbing: // downloading from server, wait until mutex releases
-    case CHUNK_STATUS::Reading: // reading from file, wait until mutex releases
+    case CHUNK_STATUS::Reading:  // reading from file, wait until mutex releases
     {
         std::unique_lock<std::mutex> lck(data.Mutex);
-        while (data.Status != CHUNK_STATUS::Readable) data.CV.wait(lck);
+        while (data.Status != CHUNK_STATUS::Readable) {
+            SAFE_FLAG_RETURN(nullptr);
+            data.CV.wait(lck);
+        }
 
         break;
     }
@@ -112,9 +132,9 @@ std::shared_ptr<char[]> Storage::GetChunk(std::shared_ptr<Chunk> Chunk)
     return data.Buffer;
 }
 
-std::shared_ptr<char[]> Storage::GetChunkPart(ChunkPart& ChunkPart)
+std::shared_ptr<char[]> Storage::GetChunkPart(ChunkPart& ChunkPart, cancel_flag& flag)
 {
-    auto chunk = GetChunk(ChunkPart.Chunk);
+    auto chunk = GetChunk(ChunkPart.Chunk, flag);
     if (ChunkPart.Offset == 0 && ChunkPart.Size == ChunkPart.Chunk->WindowSize) {
         return chunk;
     }
@@ -185,22 +205,22 @@ struct CDN_CHUNK_HEADER_V3 {
 };
 #pragma pack(pop)
 
-Compressor::buffer_value Storage::DownloadChunk(std::shared_ptr<Chunk> Chunk)
+Compressor::buffer_value Storage::DownloadChunk(std::shared_ptr<Chunk> Chunk, cancel_flag& flag)
 {
     std::shared_ptr<char[]> data;
-    size_t dataSize = Chunk->WindowSize;
 
-    if (EGSProvider::Available() && EGSProvider::IsChunkAvailable(Chunk)) {
+    if (EGSProvider::IsChunkAvailable(Chunk)) {
         data = EGSProvider::GetChunk(Chunk);
     }
-    else {
+    if (!data) { // EGSProvider GetChunk could return nullptr
         std::vector<char> chunkData;
         {
             auto chunkConn = Client::CreateConnection();
             chunkConn->SetUrl(CloudDir + Chunk->GetUrl());
-            if (!Client::Execute(chunkConn)) {
+            if (!Client::Execute(chunkConn, flag)) {
+                SAFE_FLAG_RETURN(std::make_pair(nullptr, 0));
                 LOG_WARN("Retrying...");
-                return DownloadChunk(Chunk);
+                return DownloadChunk(Chunk, flag);
             }
 
             chunkData.reserve(chunkConn->GetResponseBody().size());
@@ -215,7 +235,7 @@ Compressor::buffer_value Storage::DownloadChunk(std::shared_ptr<Chunk> Chunk)
         if (headerv1.Magic != CHUNK_HEADER_MAGIC) {
             LOG_ERROR("Downloaded chunk (%s) magic invalid: %08X", Chunk->GetGuid(), headerv1.Magic);
             LOG_WARN("Retrying...");
-            return DownloadChunk(Chunk);
+            return DownloadChunk(Chunk, flag);
         }
         if (headerv1.Version >= 2) {
             auto headerv2 = *(CDN_CHUNK_HEADER_V2*)(chunkData.data() + chunkPos);
@@ -239,6 +259,8 @@ Compressor::buffer_value Storage::DownloadChunk(std::shared_ptr<Chunk> Chunk)
         auto bufferPtr = chunkData.data() + chunkPos;
 
         data = std::shared_ptr<char[]>(new char[decompressedSize]);
+
+        SAFE_FLAG_RETURN(std::make_pair(nullptr, 0));
         if (headerv1.StoredAs & 0x01) // compressed
         {
             auto decompressor = libdeflate_alloc_decompressor(); // TODO: use ctxmanager for this
@@ -249,17 +271,22 @@ Compressor::buffer_value Storage::DownloadChunk(std::shared_ptr<Chunk> Chunk)
             memcpy(data.get(), bufferPtr, decompressedSize);
         }
     }
-    WriteChunk(CachePath / Chunk->GetFilePath(), dataSize, Compressor.StorageCompress(data, dataSize));
-    return std::make_pair(data, dataSize);
+    SAFE_FLAG_RETURN(std::make_pair(data, Chunk->WindowSize));
+    WriteChunk(CachePath / Chunk->GetFilePath(), Chunk->WindowSize, Compressor.StorageCompress(data, Chunk->WindowSize));
+    return std::make_pair(data, Chunk->WindowSize);
 }
 
-bool Storage::ReadChunk(fs::path Path, Compressor::buffer_value& ReadBuffer)
+bool Storage::ReadChunk(fs::path Path, Compressor::buffer_value& ReadBuffer, cancel_flag& flag)
 {
     auto fp = fopen(Path.string().c_str(), "rb");
     CHUNK_HEADER header;
     fread(&header, sizeof(CHUNK_HEADER), 1, fp);
     if (header.version != 0) {
         LOG_ERROR("Bad chunk version for %s: %hu", Path.string().c_str(), header.version);
+        return false;
+    }
+    if (flag.cancelled()) {
+        fclose(fp);
         return false;
     }
     switch (header.flags & ChunkFlagCompMask)
@@ -282,30 +309,24 @@ bool Storage::ReadChunk(fs::path Path, Compressor::buffer_value& ReadBuffer)
     case ChunkFlagZstd:
     {
         size_t inBufSize;
-        auto result = Compressor.ZstdDecompress(fp, inBufSize);
-
+        ReadBuffer = Compressor.ZstdDecompress(fp, inBufSize);
         fclose(fp);
-        ReadBuffer = result;
         Stats::FileReadCount.fetch_add(inBufSize, std::memory_order_relaxed);
         return true;
     }
     case ChunkFlagZlib:
     {
         size_t inBufSize;
-        auto result = Compressor.ZlibDecompress(fp, inBufSize);
-
+        ReadBuffer = Compressor.ZlibDecompress(fp, inBufSize);
         fclose(fp);
-        ReadBuffer = result;
         Stats::FileReadCount.fetch_add(inBufSize, std::memory_order_relaxed);
         return true;
     }
     case ChunkFlagLZ4:
     {
         size_t inBufSize;
-        auto result = Compressor.LZ4Decompress(fp, inBufSize);
-
+        ReadBuffer = Compressor.LZ4Decompress(fp, inBufSize);
         fclose(fp);
-        ReadBuffer = result;
         Stats::FileReadCount.fetch_add(inBufSize, std::memory_order_relaxed);
         return true;
     }

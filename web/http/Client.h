@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../../containers/cancel_flag.h"
+
 #include <memory>
 #include <curlion.h>
 
@@ -19,7 +21,7 @@ public:
 		return conn;
 	}
 
-	static bool Execute(const std::shared_ptr<curlion::HttpConnection>& connection, bool allowNon200 = false);
+	static bool Execute(const std::shared_ptr<curlion::HttpConnection>& connection, cancel_flag& flag, bool allowNon200 = false);
 
 private:
 	static FILE* CreateTempFile();

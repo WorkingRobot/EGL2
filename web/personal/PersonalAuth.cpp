@@ -180,7 +180,7 @@ bool PersonalAuth::GetExchangeCode(std::string& code)
 	tokenConn->SetUrl("https://account-public-service-prod03.ol.epicgames.com/account/api/oauth/exchange");
 	tokenConn->AddRequestHeader("Authorization", "bearer " + AccessToken);
 	
-	if (!Client::Execute(tokenConn)) {
+	if (!Client::Execute(tokenConn, cancel_flag())) {
 		LOG_ERROR("Getting exchange code: failed");
 		return false;
 	}
@@ -274,7 +274,7 @@ bool PersonalAuth::UseRefreshToken(const std::string& token)
 	form.emplace_back("refresh_token", token);
 	refreshConn->SetRequestBody(EncodeUrlForm(form));
 
-	if (!Client::Execute(refreshConn)) {
+	if (!Client::Execute(refreshConn, cancel_flag())) {
 		LOG_ERROR("Use refresh token: failed");
 		return false;
 	}
@@ -297,7 +297,7 @@ bool PersonalAuth::UseDeviceAuth(const DeviceAuthData& auth)
 	form.emplace_back("secret", auth.Secret);
 	deviceConn->SetRequestBody(EncodeUrlForm(form));
 
-	if (!Client::Execute(deviceConn)) {
+	if (!Client::Execute(deviceConn, cancel_flag())) {
 		LOG_ERROR("Use device auth: failed");
 		return false;
 	}
@@ -313,7 +313,7 @@ bool PersonalAuth::CreateDeviceAuth(DeviceAuthData& auth)
 	deviceConn->AddRequestHeader("Content-Type", "");
 	deviceConn->SetUsePost(true);
 	
-	if (!Client::Execute(deviceConn)) {
+	if (!Client::Execute(deviceConn, cancel_flag())) {
 		LOG_ERROR("Create device auth: failed");
 		return false;
 	}

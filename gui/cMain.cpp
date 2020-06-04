@@ -14,8 +14,6 @@
 #include "../checks/symlink_workaround.h"
 #include "../Logger.h"
 #include "../Stats.h"
-#include "cProgress.h"
-#include "cSetup.h"
 #include "Localization.h"
 #include "taskbar.h"
 
@@ -24,7 +22,7 @@
 #include <TlHelp32.h>
 #include <wx/gbsizer.h>
 #include <wx/notifmsg.h>
-#include <wx/windowptr.h>
+#include <wx/generic/notifmsg.h>
 
 #define SIDE_BUTTON_CREATE(name, text) \
 	auto btn_frame_##name = new wxPanel(panel, wxID_ANY); \
@@ -71,10 +69,6 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 	this->SetIcon(wxICON(APP_ICON));
 	this->SetMinSize(wxSize(CMAIN_W, CMAIN_H));
 	this->SetMaxSize(wxSize(CMAIN_W, CMAIN_H));
-
-	Systray = new SystrayIcon(this);
-	Systray->SetIcon(wxICON(APP_ICON), "EGL2");
-	wxNotificationMessage::UseTaskBarIcon(Systray);
 
 	LOG_DEBUG("Setting up UI");
 
@@ -164,11 +158,6 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 		LOG_DEBUG("Using default settings");
 	}
 
-	this->Show();
-	this->Restore();
-	this->Raise();
-	this->SetFocus();
-
 	LOG_DEBUG("Validating settings");
 	if (!SettingsValidate(&Settings)) {
 		LOG_WARN("Invalid settings");
@@ -179,6 +168,11 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 			return;
 		}
 	}
+
+	this->Show();
+	this->Restore();
+	this->Raise();
+	this->SetFocus();
 
 	Stats::StartUpdateThread(ch::milliseconds(500), [this](StatsUpdateData& data) {
 		STAT_VALUE(cpu)->SetValue(1000);
@@ -238,6 +232,9 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 			OnUpdate(Checker->GetLatestVersion());
 		}
 	}).detach();
+
+	Systray = new SystrayIcon(this);
+	Systray->SetIcon(wxICON(APP_ICON), "EGL2");
 }
 
 cMain::~cMain() {
@@ -254,8 +251,8 @@ void cMain::OnButtonHover(const wxString& string) {
 }
 
 void cMain::OnSettingsClicked(bool onStartup) {
-	if (!CurrentModal) {
-		CurrentModal = new cSetup(this, &Settings, onStartup, [this](SETTINGS* settings) {
+	if (!SetupWnd) {
+		SetupWnd = new cSetup(this, &Settings, onStartup, [this](SETTINGS* settings) {
 			auto settingsFp = fopen(SettingsPath.string().c_str(), "wb");
 			if (settingsFp) {
 				SettingsWrite(settings, settingsFp);
@@ -268,51 +265,65 @@ void cMain::OnSettingsClicked(bool onStartup) {
 			if (Checker) {
 				Checker->SetInterval(SettingsGetUpdateInterval(&Settings));
 			}
-			CurrentModal = nullptr;
+			SetupWnd.reset();
 			this->Raise();
 			this->SetFocus();
 		});
 	}
 	else {
-		CurrentModal->Restore();
-		CurrentModal->Raise();
-		CurrentModal->SetFocus();
+		SetupWnd->Restore();
+		SetupWnd->Raise();
+		SetupWnd->SetFocus();
 	}
 }
 
-#define RUN_PROGRESS(taskName, funcName, ...)				 \
+#define RUN_PROGRESS(taskName, wndPtr, runAfter, funcName, ...)	\
 {															 \
 	auto cancelled = new cancel_flag();						 \
-	cProgress* progress = new cProgress(this, taskName,		 \
-		*cancelled);										 \
-	CurrentModal = progress;								 \
-	progress->Show(true);									 \
-														 	 \
-	wxWindowPtr progressPtr(progress);				 		 \
-	std::thread([=]() {										 \
-		Build->##funcName(									 \
-			[=](uint32_t m) { progressPtr->SetMaximum(m); }, \
-			[=]() { progressPtr->Increment(); },			 \
-			*cancelled, __VA_ARGS__);						 \
-															 \
-		progressPtr->Finish();								 \
-		progressPtr->Close();								 \
+	auto onEnd = [=](bool isCancel) {						 \
+		wndPtr->Finish();									 \
+		wndPtr->Destroy();									 \
+		wndPtr.reset();										 \
+		runAfter(isCancel);									 \
 		delete cancelled;									 \
-		CurrentModal = nullptr;								 \
 		this->Raise();										 \
 		this->SetFocus();									 \
+	};														 \
+	wndPtr = new cProgress(this, taskName, 					 \
+		*cancelled, [=](){ onEnd(true); });					 \
+	wndPtr->Show(true);										 \
+														 	 \
+	std::thread([=]() {										 \
+		Build->##funcName(									 \
+			[=](uint32_t m) {								 \
+				if (wndPtr && !cancelled->cancelled()) {	 \
+					wndPtr->SetMaximum(m);					 \
+				}											 \
+			},												 \
+			[=]() {											 \
+				if (wndPtr && !cancelled->cancelled()) {	 \
+					wndPtr->Increment();					 \
+				}											 \
+			},												 \
+			[=]() {											 \
+				if (wndPtr && !cancelled->cancelled()) {	 \
+					onEnd(false);							 \
+				}											 \
+			},												 \
+			*cancelled, __VA_ARGS__);						 \
+															 \
 	}).detach();											 \
 }
 
 void cMain::OnVerifyClicked() {
-	if (!CurrentModal) {
-		RUN_PROGRESS(LSTR(MAIN_PROG_VERIFY), VerifyAllChunks, Settings.ThreadCount);
+	if (VerifyWnd) {
+		VerifyWnd->Restore();
+		VerifyWnd->Raise();
+		VerifyWnd->SetFocus();
+		return;
 	}
-	else {
-		CurrentModal->Restore();
-		CurrentModal->Raise();
-		CurrentModal->SetFocus();
-	}
+
+	RUN_PROGRESS(LSTR(MAIN_PROG_VERIFY), VerifyWnd, [](bool cancelled) { }, VerifyAllChunks, Settings.ThreadCount);
 }
 
 void cMain::OnPlayClicked() {
@@ -386,22 +397,26 @@ void cMain::OnUpdate(const std::string& Version, const std::optional<std::string
 		UpdateUrl = Url;
 	}
 
-	auto notif = new wxNotificationMessage(LSTR(MAIN_NOTIF_TITLE), wxString::Format(LSTR(MAIN_NOTIF_DESC), UpdateChecker::GetReadableVersion(Version)), this);
-	notif->SetIcon(wxICON(APP_ICON));
-	notif->AddAction(wxID_ANY, LSTR(MAIN_NOTIF_ACTION));
-	notif->Bind(wxEVT_NOTIFICATION_MESSAGE_ACTION, std::bind(&cMain::BeginUpdate, this));
-	notif->Bind(wxEVT_NOTIFICATION_MESSAGE_CLICK, std::bind(&cMain::BeginUpdate, this));
-	if (!notif->Show(wxNotificationMessage::Timeout_Never)) {
-		LOG_ERROR("Couldn't launch update notification");
-	}
+	CallAfter([=]() {
+		auto notif = new wxGenericNotificationMessage(LSTR(MAIN_NOTIF_TITLE), wxString::Format(LSTR(MAIN_NOTIF_DESC), UpdateChecker::GetReadableVersion(Version)), this);
+		notif->SetIcon(wxICON(APP_ICON));
+		if (!notif->AddAction(42, LSTR(MAIN_NOTIF_ACTION))) {
+			LOG_WARN("Actions aren't supported");
+		}
+		notif->Bind(wxEVT_NOTIFICATION_MESSAGE_ACTION, std::bind(&cMain::BeginUpdate, this));
+		notif->Bind(wxEVT_NOTIFICATION_MESSAGE_CLICK, std::bind(&cMain::BeginUpdate, this));
+		if (!notif->Show(wxNotificationMessage::Timeout_Never)) {
+			LOG_ERROR("Couldn't launch update notification");
+		}
+	});
 }
 
 void cMain::BeginUpdate()
 {
-	if (CurrentModal) {
-		CurrentModal->Restore();
-		CurrentModal->Raise();
-		CurrentModal->SetFocus();
+	if (UpdateWnd) {
+		UpdateWnd->Restore();
+		UpdateWnd->Raise();
+		UpdateWnd->SetFocus();
 		return;
 	}
 
@@ -418,16 +433,16 @@ void cMain::BeginUpdate()
 		}
 
 		this->CallAfter([this]() {
-			RUN_PROGRESS(LSTR(MAIN_PROG_UPDATE), PreloadAllChunks, Settings.BufferCount);
+			RUN_PROGRESS(LSTR(MAIN_PROG_UPDATE), UpdateWnd, [this](bool cancelled) {
+				LOG_DEBUG("EXIT NOTICED");
+				if (!cancelled) {
+					UpdateAvailable = false;
+					playBtn->SetLabel(LSTR(MAIN_BTN_PLAY));
+					UpdateUrl.reset();
+				}
+			}, PreloadAllChunks, Settings.ThreadCount);
 		});
-
-		Build->PurgeUnusedChunks();
-		LOG_DEBUG("Purged chunks");
 	}).detach();
-
-	UpdateAvailable = false;
-	playBtn->SetLabel(LSTR(MAIN_BTN_PLAY));
-	UpdateUrl.reset();
 }
 
 void cMain::Mount(const std::string& Url) {
@@ -436,5 +451,5 @@ void cMain::Mount(const std::string& Url) {
 	LOG_INFO("Mounting new url: %s", Url.c_str());
 	Build.reset(new MountedBuild(Checker->GetManifest(Url), fs::path(Settings.CacheDir) / MOUNT_FOLDER, Settings.CacheDir, SettingsGetStorageFlags(&Settings), Settings.BufferCount));
 	LOG_INFO("Setting up game dir");
-	Build->SetupGameDirectory(Settings.ThreadCount);
+	Build->SetupGameDirectory([](unsigned int m) {}, []() {}, []() {}, cancel_flag(), Settings.ThreadCount);
 }

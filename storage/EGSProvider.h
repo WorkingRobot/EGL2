@@ -3,6 +3,7 @@
 #include "../web/manifest/manifest.h"
 
 #include <filesystem>
+#include <unordered_map>
 
 namespace fs = std::filesystem;
 
@@ -40,4 +41,9 @@ private:
 
 	fs::path InstallDir;
 	std::unique_ptr<Manifest> Build;
+
+	static constexpr auto guidHash = [](const char* n) { return (*((uint64_t*)n)) ^ (*(((uint64_t*)n) + 1)); };
+	static constexpr auto guidEqual = [](const char* a, const char* b) {return !memcmp(a, b, 16); };
+	typedef std::unordered_map<char*, uint32_t, decltype(guidHash), decltype(guidEqual)> MANIFEST_CHUNK_LOOKUP;
+	MANIFEST_CHUNK_LOOKUP ChunkLookup;
 };

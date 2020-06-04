@@ -10,7 +10,7 @@
       "cmakeCommandArgs": "-DVCPKG_TARGET_TRIPLET=x64-windows-static",
       "buildCommandArgs": "-v",
       "ctestCommandArgs": "",
-      "variables": [ ]
+      "variables": []
     },
     {
       "name": "x64-RelDbg",
@@ -28,6 +28,18 @@
       "name": "x64-Release",
       "generator": "Ninja",
       "configurationType": "Release",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "-DVCPKG_TARGET_TRIPLET=x64-windows-static",
+      "buildCommandArgs": "-v",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": [ "msvc_x64_x64" ],
+      "variables": []
+    },
+    {
+      "name": "x64-MinRel",
+      "generator": "Ninja",
+      "configurationType": "MinSizeRel",
       "buildRoot": "${projectDir}\\out\\build\\${name}",
       "installRoot": "${projectDir}\\out\\install\\${name}",
       "cmakeCommandArgs": "-DVCPKG_TARGET_TRIPLET=x64-windows-static",

@@ -162,6 +162,13 @@ inline std::vector<T> ReadContainer(std::istream& stream, ReadT readT) {
 	return ret;
 }
 
+inline uint16_t htons(const uint16_t v) {
+	return (v >> 8) | (v << 8);
+}
+inline uint32_t htonl(const uint32_t v) {
+	return htons(v >> 16) | (htons((uint16_t)v) << 16);
+}
+
 Manifest::Manifest(FILE* fp)
 {
 	// https://github.com/EpicGames/UnrealEngine/blob/f8f4b403eb682ffc055613c7caf9d2ba5df7f319/Engine/Source/Runtime/Online/BuildPatchServices/Private/Data/ManifestData.cpp#L575
@@ -245,6 +252,11 @@ Manifest::Manifest(FILE* fp)
 		if (DataVersion >= 0) {
 			for (int i = 0; i < count; ++i) {
 				manifestData.read(ChunkManifestList[i]->Guid, 16);
+				auto ptr = (uint32_t*)ChunkManifestList[i]->Guid;
+				*ptr = htonl(*ptr); ++ptr;
+				*ptr = htonl(*ptr); ++ptr;
+				*ptr = htonl(*ptr); ++ptr;
+				*ptr = htonl(*ptr);
 				ChunkManifestLookup[ChunkManifestList[i]->Guid] = i;
 			}
 			for (auto& c : ChunkManifestList) { c->Hash = ReadUInt64(manifestData); }
@@ -279,6 +291,11 @@ Manifest::Manifest(FILE* fp)
 					ChunkPart ret;
 					char guidBuffer[16];
 					stream.read(guidBuffer, 16);
+					auto ptr = (uint32_t*)guidBuffer;
+					*ptr = htonl(*ptr); ++ptr;
+					*ptr = htonl(*ptr); ++ptr;
+					*ptr = htonl(*ptr); ++ptr;
+					*ptr = htonl(*ptr);
 					ret.Chunk = ChunkManifestList[ChunkManifestLookup[guidBuffer]];
 					ret.Offset = ReadUInt32(stream);
 					ret.Size = ReadUInt32(stream);
@@ -309,7 +326,7 @@ Manifest::Manifest(FILE* fp)
 
 		LOG_DEBUG("%d extra manifest fields:", Fields.size());
 		for (auto& f : Fields) {
-			LOG_DEBUG("\"%s\": \"%s\"\n", f.first.c_str(), f.second.c_str());
+			LOG_DEBUG("\"%s\": \"%s\"", f.first.c_str(), f.second.c_str());
 		}
 	}
 }

@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <deque>
+#include <numeric>
 #include <sddl.h>
 #include <set>
 #include <unordered_set>
@@ -118,14 +119,22 @@ inline int ValidChunkFile(fs::path& CacheDir, fs::path ChunkPath) {
 
 bool MountedBuild::SetupCacheDirectory(fs::path CacheDir) {
     if (!fs::is_directory(CacheDir) && !fs::create_directories(CacheDir)) {
-        LOG_ERROR("can't create cachedir %s", CacheDir.string().c_str());
+        LOG_ERROR("can't create cachedir", CacheDir.string().c_str());
+        return false;
+    }
+
+    if (!fs::is_directory(CacheDir / GAME_DIR) && !fs::create_directory(CacheDir / GAME_DIR)) {
+        LOG_ERROR("can't create gamedir");
         return false;
     }
 
     char cachePartFolder[3];
     for (int i = 0; i < 256; ++i) {
         sprintf(cachePartFolder, "%02X", i);
-        fs::create_directory(CacheDir / cachePartFolder);
+        if (!fs::is_directory(CacheDir / cachePartFolder) && !fs::create_directory(CacheDir / cachePartFolder)) {
+            LOG_ERROR("can't create dir %s", cachePartFolder);
+            return false;
+        }
     }
 
     /* game dir isn't used anymore, this code is kinda wacked up
@@ -149,18 +158,18 @@ bool MountedBuild::SetupCacheDirectory(fs::path CacheDir) {
     return true;
 }
 
-void MountedBuild::PreloadFile(File& File, uint32_t ThreadCount, cancel_flag& cancelFlag) {
+void MountedBuild::PreloadFile(File& File, uint32_t ThreadCount, cancel_flag& flag) {
     std::deque<std::thread> threads;
     int n = 0;
     for (auto& chunkPart : File.ChunkParts) {
-        if (cancelFlag.cancelled()) {
+        if (flag.cancelled()) {
             break;
         }
         if (StorageData.IsChunkDownloaded(chunkPart)) {
             continue;
         }
 
-        // cheap semaphore, keeps thread count low instead of having 81k threads pile up
+        // lightweight "semaphore"
         while (threads.size() >= ThreadCount) {
             threads.front().join();
             threads.pop_front();
@@ -168,11 +177,11 @@ void MountedBuild::PreloadFile(File& File, uint32_t ThreadCount, cancel_flag& ca
 
         
         threads.emplace_back([&, this]() {
-            StorageData.GetChunkPart(chunkPart);
+            StorageData.GetChunkPart(chunkPart, flag);
         });
     }
 
-    if (cancelFlag.cancelled()) {
+    if (flag.cancelled()) {
         for (auto& thread : threads) {
             thread.detach();
         }
@@ -201,108 +210,175 @@ bool inline CompareFile(File& File, fs::path FilePath) {
     return !memcmp(FileSha, File.ShaHash, 20);
 }
 
-bool MountedBuild::SetupGameDirectory(uint32_t threadCount) {
-    auto gameDir = CacheDir / GAME_DIR;
-
-    if (!fs::is_directory(gameDir) && !fs::create_directories(gameDir)) {
-        LOG_ERROR("can't create gamedir");
-        return false;
-    }
-
-    bool symlinkCreationEnforced = false;
-    cancel_flag flag;
-    std::error_code ec;
-    for (auto& file : Build.FileManifestList) {
-        fs::path filePath = file.FileName;
-        fs::path folderPath = filePath.parent_path();
-
-        if (!fs::create_directories(gameDir / folderPath, ec) && !fs::is_directory(gameDir / folderPath)) {
-            LOG_ERROR("Can't create folder %s, error %s", folderPath.string().c_str(), ec.message().c_str());
-            goto continueFileLoop;
-        }
-        do {
-            if (folderPath.filename() == "Binaries") {
-                if (!CompareFile(file, gameDir / filePath)) {
-                    PreloadFile(file, threadCount, flag);
-                    if (fs::status(gameDir / filePath).type() == fs::file_type::regular) {
-                        fs::permissions(gameDir / filePath, fs::perms::_All_write, fs::perm_options::add, ec); // copying over a file from the drive gives it the read-only attribute, this overrides that
-                        if (ec) {
-                            LOG_ERROR("Could not add permission for %s, error %s", filePath.string().c_str(), ec.message().c_str());
-                        }
-                    }
-                    if (!fs::copy_file(MountDir / filePath, gameDir / filePath, fs::copy_options::overwrite_existing, ec)) {
-                        LOG_ERROR("Could not copy file %s, error %s", filePath.string().c_str(), ec.message().c_str());
-                    }
-                }
-                goto continueFileLoop;
-            }
-            folderPath = folderPath.parent_path();
-        } while (folderPath != folderPath.root_path());
-
-        if (fs::is_symlink(gameDir / filePath)) {
-            if (fs::read_symlink(gameDir / filePath) != MountDir / filePath) {
-                fs::remove(gameDir / filePath); // remove if exists and is invalid
-                fs::create_symlink(MountDir / filePath, gameDir / filePath);
-            }
-        }
-        else {
-            fs::create_symlink(MountDir / filePath, gameDir / filePath);
-        }
-    continueFileLoop:
-        ;
-    }
-    return true;
-}
-
-bool MountedBuild::PreloadAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount) {
-    LOG_DEBUG("preloading");
-    setMax(GetMissingChunkCount());
+void MountedBuild::SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncrHandler onProg, ProgressFinishHandler onFinish, cancel_flag& flag, uint32_t threadCount) {
+    LOG_DEBUG("setting up game dir");
+    setMax(Build.FileManifestList.size());
 
     std::deque<std::thread> threads;
+    threads.emplace_back([&, this]() { // checking symlinks really doesn't take much time at all, just check for the workaround binaries
+        setMax(std::count_if(Build.FileManifestList.begin(), Build.FileManifestList.end(), [](File& file) {
+            fs::path folderPath = file.FileName;
+            do {
+                if (folderPath.filename() == "Binaries") {
+                    return true;
+                }
+                folderPath = folderPath.parent_path();
+            } while (folderPath != folderPath.root_path());
+            return false;
+        }));
+    });
 
-    int n = 0;
-    for (auto& chunk : Build.ChunkManifestList) {
-        if (cancelFlag.cancelled()) {
-            break;
-        }
-        if (StorageData.IsChunkDownloaded(chunk)) {
-            //LogError("already downloaded", ChunkCount);
-            //progress();
-            continue;
-        }
-
-        // cheap semaphore, keeps thread count low instead of having 81k threads pile up
+    auto gameDir = CacheDir / GAME_DIR;
+    for (auto& file : Build.FileManifestList) {
+        // lightweight "semaphore"
         while (threads.size() >= threadCount) {
             threads.front().join();
             threads.pop_front();
         }
 
-        
-        threads.emplace_back([&, this]() {
-            StorageData.GetChunk(chunk);
-            progress();
+        if (flag.cancelled()) {
+            break;
+        }
+
+        threads.emplace_back([&, gameDir, this]() {
+            std::error_code ec;
+            fs::path filePath = file.FileName;
+            fs::path folderPath = filePath.parent_path();
+
+            if (!fs::create_directories(gameDir / folderPath, ec) && !fs::is_directory(gameDir / folderPath)) {
+                LOG_ERROR("Can't create folder %s, error %s", folderPath.string().c_str(), ec.message().c_str());
+                return;
+            }
+            do {
+                if (folderPath.filename() == "Binaries") {
+                    if (!CompareFile(file, gameDir / filePath)) {
+                        PreloadFile(file, threadCount, flag);
+                        if (!fs::copy_file(MountDir / filePath, gameDir / filePath, fs::copy_options::overwrite_existing, ec)) {
+                            LOG_ERROR("Could not copy file %s, error %s", filePath.string().c_str(), ec.message().c_str());
+                        }
+                        if (fs::status(gameDir / filePath).type() == fs::file_type::regular) {
+                            SetFileAttributes((gameDir / filePath).c_str(), FILE_ATTRIBUTE_NORMAL); // copying over a file from the drive gives it the read-only attribute, this overrides that
+                        }
+                    }
+                    onProg();
+                    return;
+                }
+                folderPath = folderPath.parent_path();
+            } while (folderPath != folderPath.root_path());
+
+            if (fs::is_symlink(gameDir / filePath)) {
+                if (fs::read_symlink(gameDir / filePath) != MountDir / filePath) {
+                    fs::remove(gameDir / filePath); // remove if exists and is invalid
+                    fs::create_symlink(MountDir / filePath, gameDir / filePath);
+                }
+            }
+            else {
+                fs::create_symlink(MountDir / filePath, gameDir / filePath);
+            }
         });
     }
+    LOG_DEBUG("Cancel notified");
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    onFinish();
+    LOG_DEBUG("set up game dir");
+}
 
-    if (cancelFlag.cancelled()) {
-        for (auto& thread : threads) {
-            thread.detach();
+void MountedBuild::PreloadAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler onProg, ProgressFinishHandler onFinish, cancel_flag& flag, uint32_t threadCount) {
+    LOG_DEBUG("preloading");
+    setMax(Build.ChunkManifestList.size());
+
+    auto purgeThread = std::thread([&, this]() {
+        PurgeUnusedChunks(flag);
+    });
+
+    std::deque<std::thread> threads;
+    threads.emplace_back([&, this]() {
+            setMax(GetMissingChunkCount());
+    });
+
+    for (auto& chunk : Build.ChunkManifestList) {
+        if (StorageData.IsChunkDownloaded(chunk)) {
+            continue;
         }
-    }
-    else {
-        for (auto& thread : threads) {
-            thread.join();
+
+        // lightweight "semaphore"
+        while (threads.size() >= threadCount) {
+            threads.front().join();
+            threads.pop_front();
         }
+
+        if (flag.cancelled()) {
+            break;
+        }
+        
+        threads.emplace_back([&, this]() {
+            StorageData.GetChunk(chunk, flag);
+            onProg();
+        });
     }
+    LOG_DEBUG("Cancel notified");
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    purgeThread.join();
+    onFinish();
     LOG_DEBUG("preloaded");
-    return true;
+}
+
+void MountedBuild::VerifyAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler onProg, ProgressFinishHandler onFinish, cancel_flag& flag, uint32_t threadCount) {
+    LOG_DEBUG("verifying");
+    setMax(Build.ChunkManifestList.size());
+
+    std::deque<std::thread> threads;
+    threads.emplace_back([&, this]() {
+        size_t cnt = std::count_if(fs::recursive_directory_iterator(CacheDir), fs::recursive_directory_iterator(),
+            [this](const fs::directory_entry& f) {
+                return f.is_regular_file() && ValidChunkFile(CacheDir, f.path()) == 0;
+            });
+        setMax((std::min)(Build.ChunkManifestList.size(), cnt));
+    });
+
+    for (auto& chunk : Build.ChunkManifestList) {
+        if (!StorageData.IsChunkDownloaded(chunk)) {
+            continue;
+        }
+
+        // lightweight "semaphore"
+        while (threads.size() >= threadCount) {
+            threads.front().join();
+            threads.pop_front();
+        }
+
+        if (flag.cancelled()) {
+            break;
+        }
+
+        threads.emplace_back(std::thread([=, this, &flag]() {
+            if (!StorageData.VerifyChunk(chunk, flag)) {
+                if (flag.cancelled()) return;
+                LOG_WARN("Invalid hash");
+                StorageData.DeleteChunk(chunk);
+                if (flag.cancelled()) return;
+                StorageData.GetChunk(chunk, flag);
+            }
+            onProg();
+        }));
+    }
+    LOG_DEBUG("Cancel notified");
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    onFinish();
+    LOG_DEBUG("preloaded");
 }
 
 #define HTONLL(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
 #define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
 auto guidHash = [](const char* n) { return (*((uint64_t*)n)) ^ (*(((uint64_t*)n) + 1)); };
 auto guidEqual = [](const char* a, const char* b) {return !memcmp(a, b, 16); };
-void MountedBuild::PurgeUnusedChunks() {
+void MountedBuild::PurgeUnusedChunks(cancel_flag& flag) {
     LOG_DEBUG("purging");
     std::unordered_set<char*, decltype(guidHash), decltype(guidEqual)> ManifestGuids;
     ManifestGuids.reserve(Build.ChunkManifestList.size());
@@ -314,9 +390,14 @@ void MountedBuild::PurgeUnusedChunks() {
     char guidBuffer2[16];
     auto iterator = fs::recursive_directory_iterator(CacheDir);
     for (auto& p : iterator) {
+        if (flag.cancelled()) {
+            return;
+        }
+
         if (!p.is_regular_file()) {
             continue;
         }
+
         auto res = ValidChunkFile(CacheDir, p.path());
         if (res == 1) {
             iterator.pop();
@@ -336,48 +417,6 @@ void MountedBuild::PurgeUnusedChunks() {
         }
     }
     LOG_DEBUG("purged");
-}
-
-void MountedBuild::VerifyAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount) {
-    setMax((std::min)(Build.ChunkManifestList.size(), (size_t)std::count_if(fs::recursive_directory_iterator(CacheDir), fs::recursive_directory_iterator(), [this](const fs::directory_entry& f) { return f.is_regular_file() && ValidChunkFile(CacheDir, f.path()) == 0; })));
-
-    std::deque<std::thread> threads;
-
-    for (auto& chunk : Build.ChunkManifestList) {
-        if (cancelFlag.cancelled()) {
-            break;
-        }
-        if (!StorageData.IsChunkDownloaded(chunk)) {
-            continue;
-        }
-
-        // cheap semaphore, keeps thread count low instead of having 81k threads pile up
-        while (threads.size() >= threadCount) {
-            threads.front().join();
-            progress();
-            threads.pop_front();
-        }
-
-        threads.emplace_back(std::thread([=, this]() {
-            if (!StorageData.VerifyChunk(chunk)) {
-                LOG_WARN("Invalid hash");
-                StorageData.DeleteChunk(chunk);
-                StorageData.GetChunk(chunk);
-            }
-        }));
-    }
-
-    if (cancelFlag.cancelled()) {
-        for (auto& thread : threads) {
-            thread.detach();
-        }
-    }
-    else {
-        for (auto& thread : threads) {
-            thread.join();
-            progress();
-        }
-    }
 }
 
 uint32_t MountedBuild::GetMissingChunkCount()
@@ -411,7 +450,7 @@ void MountedBuild::FileRead(PVOID Handle, PVOID Buffer, UINT64 offset, ULONG len
     if (file->GetChunkIndex(offset, ChunkStartIndex, ChunkStartOffset)) {
         uint32_t BytesRead = 0;
         for (auto chunkPart = file->ChunkParts.begin() + ChunkStartIndex; chunkPart != file->ChunkParts.end(); chunkPart++) {
-            auto chunkBuffer = StorageData.GetChunkPart(*chunkPart);
+            auto chunkBuffer = StorageData.GetChunkPart(*chunkPart, cancel_flag());
             if (((int64_t)length - (int64_t)BytesRead) > (int64_t)chunkPart->Size - (int64_t)ChunkStartOffset) { // copy the entire buffer over
                 //LOG_DEBUG("Copying to %d, size %d", BytesRead, chunkPart->Size - ChunkStartOffset);
                 memcpy((char*)Buffer + BytesRead, chunkBuffer.get() + ChunkStartOffset, chunkPart->Size - ChunkStartOffset);

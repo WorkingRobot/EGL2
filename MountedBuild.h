@@ -6,10 +6,12 @@
 #include "storage/storage.h"
 
 #include <filesystem>
+
 namespace fs = std::filesystem;
 
 typedef std::function<void(uint32_t max)> ProgressSetMaxHandler;
 typedef std::function<void()> ProgressIncrHandler;
+typedef std::function<void()> ProgressFinishHandler;
 
 class MountedBuild {
 public:
@@ -17,10 +19,10 @@ public:
 	~MountedBuild();
 
 	static bool SetupCacheDirectory(fs::path CacheDir);
-	bool SetupGameDirectory(uint32_t threadCount);
-	bool PreloadAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount);
-	void PurgeUnusedChunks();
-	void VerifyAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler progress, cancel_flag& cancelFlag, uint32_t threadCount);
+	void SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncrHandler onProg, ProgressFinishHandler onFinish, cancel_flag& flag, uint32_t threadCount);
+	void PreloadAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler onProg, ProgressFinishHandler onFinish, cancel_flag& flag, uint32_t threadCount);
+	void VerifyAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHandler onProg, ProgressFinishHandler onFinish, cancel_flag& flag, uint32_t threadCount);
+	void PurgeUnusedChunks(cancel_flag& flag);
 	uint32_t GetMissingChunkCount();
 	void LaunchGame(const char* additionalArgs);
 

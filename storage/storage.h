@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../containers/cancel_flag.h"
 #include "../web/http.h"
 #include "../web/manifest/manifest.h"
 #include "compression.h"
@@ -57,16 +58,16 @@ public:
 
     bool IsChunkDownloaded(std::shared_ptr<Chunk> Chunk);
     bool IsChunkDownloaded(ChunkPart& ChunkPart);
-    bool VerifyChunk(std::shared_ptr<Chunk> Chunk);
+    bool VerifyChunk(std::shared_ptr<Chunk> Chunk, cancel_flag& flag);
     void DeleteChunk(std::shared_ptr<Chunk> Chunk);
-    std::shared_ptr<char[]> GetChunk(std::shared_ptr<Chunk> Chunk);
-    std::shared_ptr<char[]> GetChunkPart(ChunkPart& ChunkPart);
+    std::shared_ptr<char[]> GetChunk(std::shared_ptr<Chunk> Chunk, cancel_flag& flag);
+    std::shared_ptr<char[]> GetChunkPart(ChunkPart& ChunkPart, cancel_flag& flag);
 
 private:
     CHUNK_POOL_DATA& GetPoolData(std::shared_ptr<Chunk> Chunk);
     CHUNK_STATUS GetUnpooledChunkStatus(std::shared_ptr<Chunk> Chunk);
-    Compressor::buffer_value DownloadChunk(std::shared_ptr<Chunk> Chunk);
-    bool ReadChunk(fs::path Path, Compressor::buffer_value& ReadBuffer);
+    Compressor::buffer_value DownloadChunk(std::shared_ptr<Chunk> Chunk, cancel_flag& flag);
+    bool ReadChunk(fs::path Path, Compressor::buffer_value& ReadBuffer, cancel_flag& flag);
     void WriteChunk(fs::path Path, uint32_t DecompressedSize, Compressor::buffer_value& Buffer);
 
     fs::path CachePath;

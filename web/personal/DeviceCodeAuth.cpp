@@ -22,7 +22,7 @@ DeviceCodeAuth::DeviceCodeAuth(DevCodeCallback setupCb)
 
 		tokenConn->SetRequestBody("grant_type=client_credentials");
 
-		if (!Client::Execute(tokenConn)) {
+		if (!Client::Execute(tokenConn, cancel_flag())) {
 			LOG_ERROR("Getting access token: failed");
 			return;
 		}
@@ -45,7 +45,7 @@ DeviceCodeAuth::DeviceCodeAuth(DevCodeCallback setupCb)
 		deviceConn->SetUsePost(true);
 		deviceConn->AddRequestHeader("Authorization", "bearer " + accessToken);
 		
-		if (!Client::Execute(deviceConn)) {
+		if (!Client::Execute(deviceConn, cancel_flag())) {
 			LOG_ERROR("Init device code token: failed");
 			return;
 		}
@@ -76,7 +76,7 @@ DeviceCodeAuth::DeviceCodeAuth(DevCodeCallback setupCb)
 		form.emplace_back("device_code", deviceCode);
 		deviceConn->SetRequestBody(EncodeUrlForm(form));
 
-		if (!Client::Execute(deviceConn, true)) {
+		if (!Client::Execute(deviceConn, cancel_flag(), true)) {
 			LOG_ERROR("Attempt device code: failed");
 			continue;
 		}

@@ -1,18 +1,20 @@
 #pragma once
 
 #include "../containers/cancel_flag.h"
-#include "cMain.h"
 
+#include <chrono>
 #include <queue>
 #include <wx/wx.h>
+
+namespace ch = std::chrono;
 
 class cProgress : public wxFrame
 {
 	typedef std::chrono::steady_clock Clock;
-	const int queueSize = 200;
+	static constexpr int queueSize = 200;
 
 public:
-	cProgress(cMain* main, wxString taskName, cancel_flag& cancelFlag, float updateFreq = .05f, uint32_t maximum = 1);
+	cProgress(wxWindow* main, wxString taskName, cancel_flag& cancelFlag, std::function<void()> onCancel, float updateFreq = .05f, uint32_t maximum = 1);
 	~cProgress();
 
 	void SetFrequency(float updateFreq);
@@ -32,9 +34,9 @@ protected:
 	wxButton* progressCancelBtn = nullptr;
 
 	wxAppProgressIndicator* progressTaskbar = nullptr;
-	wxWindowDisabler* progressDisabler = nullptr;
 
 private:
+	std::function<void()> OnCancel;
 	void Cancel(cancel_flag& cancelFlag);
 
 	void Update(bool force = false);
