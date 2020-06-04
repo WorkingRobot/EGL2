@@ -136,7 +136,7 @@ void SettingsWrite(SETTINGS* Settings, FILE* File)
 SETTINGS SettingsDefault() {
 	return {
 		.CacheDir = "",
-		.CompressionMethod = SettingsCompressionMethod::Zstandard,
+		.CompressionMethod = SettingsCompressionMethod::LZ4,
 		.CompressionLevel = SettingsCompressionLevel::Slow,
 		.UpdateInterval = SettingsUpdateInterval::Minute1,
 		.BufferCount = 128,
