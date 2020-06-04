@@ -6,6 +6,7 @@
 
 #include "../Logger.h"
 #include "../Stats.h"
+#include "sha.h"
 
 #include <filesystem>
 #include <fstream>
@@ -176,6 +177,10 @@ std::shared_ptr<char[]> EGSProvider::getChunk(std::shared_ptr<Chunk>& chunk)
 	}
 	if (amtRead != chunk->WindowSize) {
 		LOG_ERROR("Couldn't get entire chunk of %s", chunk->GetGuid().c_str());
+		return nullptr;
+	}
+	if (!VerifyHash(ret.get(), chunk->WindowSize, chunk->ShaHash)) {
+		LOG_ERROR("Chunk %s has invalid hash", chunk->GetGuid().c_str());
 		return nullptr;
 	}
 	return ret;

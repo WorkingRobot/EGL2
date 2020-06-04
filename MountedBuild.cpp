@@ -358,10 +358,10 @@ void MountedBuild::VerifyAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHan
         threads.emplace_back(std::thread([=, this, &flag]() {
             if (!StorageData.VerifyChunk(chunk, flag)) {
                 if (flag.cancelled()) return;
-                LOG_WARN("Invalid hash");
+                LOG_WARN("Invalid hash for %s", chunk->GetGuid().c_str());
                 StorageData.DeleteChunk(chunk);
                 if (flag.cancelled()) return;
-                StorageData.GetChunk(chunk, flag);
+                StorageData.DownloadChunk(chunk, flag, true);
             }
             onProg();
         }));

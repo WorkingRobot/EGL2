@@ -205,11 +205,11 @@ struct CDN_CHUNK_HEADER_V3 {
 };
 #pragma pack(pop)
 
-Compressor::buffer_value Storage::DownloadChunk(std::shared_ptr<Chunk> Chunk, cancel_flag& flag)
+Compressor::buffer_value Storage::DownloadChunk(std::shared_ptr<Chunk> Chunk, cancel_flag& flag, bool forceDownload)
 {
     std::shared_ptr<char[]> data;
 
-    if (EGSProvider::IsChunkAvailable(Chunk)) {
+    if (!forceDownload && EGSProvider::IsChunkAvailable(Chunk)) {
         data = EGSProvider::GetChunk(Chunk);
     }
     if (!data) { // EGSProvider GetChunk could return nullptr
