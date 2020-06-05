@@ -3,6 +3,7 @@ cmake_minimum_required (VERSION 3.9.2)
 project (EGL2) 
 
 set(WX_DIR "J:\\Code\\wxWidgets" CACHE PATH "wxWidgets directory" FORCE)
+option(ENABLE_CONSOLE "Use console subsystem" OFF)
 
 aux_source_directory(. FILE_SOURCES)
 aux_source_directory(filesystem FILESYSTEM_FILE_SOURCES)
@@ -17,7 +18,16 @@ aux_source_directory(libraries/curlion CURLION_FILE_SOURCES)
 
 aux_source_directory(localetool LOCALETOOL_FILE_SOURCES)
 
-add_executable(EGL2 WIN32
+if (ENABLE_CONSOLE)
+set(SUBSYSTEM "")
+add_compile_definitions(USE_CONSOLE)
+message(STATUS "Using console subsystem")
+else()
+set (SUBSYSTEM "WIN32")
+message(STATUS "Using GUI subsystem")
+endif()
+
+add_executable(EGL2 ${SUBSYSTEM}
         ${INTERFACE_FILE_SOURCES}
         "resources.rc"
         ${CURLION_FILE_SOURCES}

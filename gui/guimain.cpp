@@ -1,9 +1,9 @@
 #include "cApp.h"
 
-// #define USE_CONSOLE
-
 #ifdef USE_CONSOLE
-wxIMPLEMENT_APP_CONSOLE(cApp);
+#define IMPLEMENT_APP wxIMPLEMENT_APP_CONSOLE
 #else
-wxIMPLEMENT_APP(cApp);
+#define IMPLEMENT_APP wxIMPLEMENT_APP
 #endif
+
+IMPLEMENT_APP(cApp);
