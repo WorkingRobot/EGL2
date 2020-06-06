@@ -5,7 +5,6 @@
 #endif
 
 #include "../Logger.h"
-#include "../resources.h"
 
 #include <codecvt>
 #define WIN32_LEAN_AND_MEAN
@@ -19,55 +18,6 @@ inline wchar_t* ReadString(char** bufPos) {
     buf[size] = L'\0';
     *bufPos += sizeof(uint16_t) + size * 2;
     return buf;
-}
-
-bool Localization::InitializeLocales()
-{
-    auto resInfo = FindResource(NULL, MAKEINTRESOURCE(LOCALE_INFO), RT_RCDATA);
-    if (!resInfo) {
-        LOG_FATAL("Could not find locale resource!");
-        return false;
-    }
-    auto resData = LoadResource(NULL, resInfo);
-    if (!resData) {
-        LOG_FATAL("Could not load locale resource!");
-        return false;
-    }
-    auto resPtr = LockResource(resData);
-    if (!resPtr) {
-        LOG_FATAL("Could not lock locale resource!");
-        FreeResource(resData);
-        return false;
-    }
-    auto resSize = SizeofResource(NULL, resInfo);
-    if (!resSize) {
-        LOG_FATAL("Could not get size of locale resource!");
-        FreeResource(resData);
-        return false;
-    }
-
-    auto locData = std::unique_ptr<char[]>(new char[*(uint32_t*)resPtr]);
-    auto locSize = ZSTD_decompress(locData.get(), *(uint32_t*)resPtr, (char*)resPtr + sizeof(uint32_t), resSize - sizeof(uint32_t));
-    if (ZSTD_isError(locSize)) {
-        LOG_FATAL("Could not decompress locale data: %s", ZSTD_getErrorName(locSize));
-        FreeResource(resData);
-        return false;
-    }
-
-    char* locPos = locData.get();
-    for (int i = 0; i < (int)Locale::Count; ++i) {
-        for (int j = 0; j < (int)LocaleString::Count; ++j) {
-            if (locPos - locSize == locData.get()) {
-                LOG_ERROR("Could not parse locale data at %d %d", i, j);
-                FreeResource(resData);
-                return true;
-            }
-            LocaleStrings[i][j].reset(ReadString(&locPos));
-        }
-    }
-
-    FreeResource(resData);
-    return true;
 }
 
 inline void SplitLCID(LCID lcid, uint8_t& sortId, uint16_t& languageId) {
@@ -114,4 +64,64 @@ Locale Localization::GetSystemLocale()
         LOG_WARN("Using default locale for %02X\n", langId & 0xFF);
         return Locale::EN;
     }
+}
+
+inline LPCWSTR GetResourceName(Locale locale) {
+    switch (locale) {
+#define LS(name) case Locale::##name: return L"LOCALE_" #name;
+        LOCALETYPES
+#undef LS
+    default: return L"LOCALE_EN";
+    }
+}
+
+bool Localization::UseLocale(Locale locale) {
+    if (locale == SelectedLocale) {
+        return true;
+    }
+    auto resInfo = FindResource(NULL, GetResourceName(locale), RT_RCDATA);
+    if (!resInfo) {
+        LOG_FATAL("Could not find locale resource!");
+        return false;
+    }
+    auto resData = LoadResource(NULL, resInfo);
+    if (!resData) {
+        LOG_FATAL("Could not load locale resource!");
+        return false;
+    }
+    auto resPtr = LockResource(resData);
+    if (!resPtr) {
+        LOG_FATAL("Could not lock locale resource!");
+        FreeResource(resData);
+        return false;
+    }
+    auto resSize = SizeofResource(NULL, resInfo);
+    if (!resSize) {
+        LOG_FATAL("Could not get size of locale resource!");
+        FreeResource(resData);
+        return false;
+    }
+
+    auto locData = std::unique_ptr<char[]>(new char[*(uint32_t*)resPtr]);
+    auto locSize = ZSTD_decompress(locData.get(), *(uint32_t*)resPtr, (char*)resPtr + sizeof(uint32_t), resSize - sizeof(uint32_t));
+    if (ZSTD_isError(locSize)) {
+        LOG_FATAL("Could not decompress locale data: %s", ZSTD_getErrorName(locSize));
+        FreeResource(resData);
+        return false;
+    }
+
+    char* locPos = locData.get();
+    for (int i = 0; i < (int)LocaleString::Count; ++i) {
+        if (locPos - locSize == locData.get()) {
+            LOG_ERROR("Could not parse locale data at %d", i);
+            FreeResource(resData);
+            SelectedLocale = locale;
+            return true;
+        }
+        LocaleStrings[i].reset(ReadString(&locPos));
+    }
+
+    FreeResource(resData);
+    SelectedLocale = locale;
+    return true;
 }

@@ -36,8 +36,7 @@ bool cApp::OnInit() {
 	};
 
 	LOG_INFO("Loading locales");
-	Localization::UseLocale(Localization::GetSystemLocale());
-	if (!Localization::InitializeLocales()) {
+	if (!Localization::UseLocale(Localization::GetSystemLocale())) {
 		wxMessageBox("Could not load locale data!", LTITLE("Error"), wxICON_ERROR | wxOK | wxCENTRE);
 		return false;
 	}

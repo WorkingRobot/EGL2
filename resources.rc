@@ -1,8 +1,9 @@
 APP_ICON ICON "icon.ico"
 
-#include "resources.h"
-
-LOCALE_INFO RCDATA "locales.dat"
+#include "gui/localedefs.h"
+#define STR(N) #N
+#define LS(name) LOCALE_##name RCDATA STR(locales/out/##name##.loc)
+LOCALETYPES
 
 #include <wx/msw/wx.rc>
 

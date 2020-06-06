@@ -10,8 +10,8 @@ just a bunch of strings back to back, parser knows the locale of the string and 
 
 */
 
-#define LOCTEXT_FOLDER "../../../localetool/locales/"
-#define LOCDATA_FILE   "../../../locales.dat"
+#define LOCTEXT_FOLDER "../../../locales/"
+#define LOCDATA_FOLDER "../../../locales/out/"
 
 #include "../gui/Localization.h"
 
@@ -61,34 +61,33 @@ inline void WriteLocale(std::ostringstream& ostr, FILE* localePtr) {
 	}
 }
 
-inline void WriteLocale(const char* filename, const char* lang, std::ostringstream& ostr) {
-	auto inpF = fopen(filename, "rb");
-	if (inpF) {
-		printf("Parsing %s\n", lang);
-		WriteLocale(ostr, inpF);
-		fclose(inpF);
-	}
-	else {
-		printf("COULD NOT OPEN %s\n", lang);
-	}
-}
-
-int main(int argc, char* argv[]) {
+inline void WriteLocale(const char* infile, const char* outfile, const char* lang) {
 	std::string odata;
 	{
 		std::ostringstream ostr;
-#define LS(name) WriteLocale(LOCTEXT_FOLDER #name ".json", #name, ostr);
-		LOCALETYPES
-#undef LS
+		auto inpF = fopen(infile, "rb");
+		if (inpF) {
+			printf("Parsing %s\n", lang);
+			WriteLocale(ostr, inpF);
+			fclose(inpF);
+		}
+		else {
+			printf("COULD NOT OPEN %s\n", lang);
+		}
 		odata = ostr.str();
 	}
-
 	auto obuf = std::unique_ptr<char[]>(new char[ZSTD_COMPRESSBOUND(odata.size())]);
 	auto osize = ZSTD_compress(obuf.get(), ZSTD_COMPRESSBOUND(odata.size()), odata.data(), odata.size(), ZSTD_maxCLevel());
 
-	std::ofstream outF(LOCDATA_FILE, std::ios::out | std::ios::binary | std::ios::trunc);
+	std::ofstream outF(outfile, std::ios::out | std::ios::binary | std::ios::trunc);
 	auto dsize = (uint32_t)odata.size();
 	outF.write((char*)&dsize, sizeof(uint32_t));
 	outF.write(obuf.get(), osize);
 	outF.close();
+}
+
+int main(int argc, char* argv[]) {
+#define LS(name) WriteLocale(LOCTEXT_FOLDER #name ".json", LOCDATA_FOLDER #name ".loc", #name);
+		LOCALETYPES
+#undef LS
 }
