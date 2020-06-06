@@ -136,25 +136,6 @@ bool MountedBuild::SetupCacheDirectory(fs::path CacheDir) {
             return false;
         }
     }
-
-    /* game dir isn't used anymore, this code is kinda wacked up
-    auto oldGameDir = CacheDir / "game";
-    if (fs::is_directory(oldGameDir)) {
-        LOG_INFO("Removing old game folder %s", oldGameDir.string().c_str());
-        std::error_code ec;
-        for (auto& f : fs::recursive_directory_iterator(oldGameDir)) {
-            fs::permissions(f, fs::perms::_All_write, ec);
-            if (ec) {
-                LOG_INFO(f.path().string().c_str());
-                LOG_ERROR(ec.message().c_str());
-            }
-        }
-        fs::remove_all(oldGameDir, ec);
-        if (ec) {
-            LOG_ERROR("Could not remove old game folder: %s", ec.message().c_str());
-        }
-    }
-    */
     return true;
 }
 
@@ -242,23 +223,26 @@ void MountedBuild::SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncr
 
         threads.emplace_back([&, gameDir, this]() {
             std::error_code ec;
-            fs::path filePath = file.FileName;
+            fs::path filePath = gameDir / file.FileName;
             fs::path folderPath = filePath.parent_path();
 
             if (!fs::create_directories(gameDir / folderPath, ec) && !fs::is_directory(gameDir / folderPath)) {
-                LOG_ERROR("Can't create folder %s, error %s", folderPath.string().c_str(), ec.message().c_str());
+                LOG_ERROR("Can't create folder %s for %s, error %s", folderPath.string().c_str(), filePath.string().c_str(), ec.message().c_str());
                 return;
             }
             do {
                 if (folderPath.filename() == "Binaries") {
-                    if (!CompareFile(file, gameDir / filePath)) {
+                    if (!CompareFile(file, filePath)) {
+                        LOG_DEBUG("Preloading %s", file.FileName.c_str());
                         PreloadFile(file, threadCount, flag);
-                        if (!fs::copy_file(MountDir / filePath, gameDir / filePath, fs::copy_options::overwrite_existing, ec)) {
+                        LOG_DEBUG("Copying %s", file.FileName.c_str());
+                        if (!fs::copy_file(MountDir / file.FileName, filePath, fs::copy_options::overwrite_existing, ec)) {
                             LOG_ERROR("Could not copy file %s, error %s", filePath.string().c_str(), ec.message().c_str());
                         }
-                        if (fs::status(gameDir / filePath).type() == fs::file_type::regular) {
-                            SetFileAttributes((gameDir / filePath).c_str(), FILE_ATTRIBUTE_NORMAL); // copying over a file from the drive gives it the read-only attribute, this overrides that
+                        if (fs::status(filePath).type() == fs::file_type::regular) {
+                            SetFileAttributes((filePath).c_str(), FILE_ATTRIBUTE_NORMAL); // copying over a file from the drive gives it the read-only attribute, this overrides that
                         }
+                        LOG_DEBUG("Set up %s", file.FileName.c_str());
                     }
                     onProg();
                     return;
@@ -266,18 +250,33 @@ void MountedBuild::SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncr
                 folderPath = folderPath.parent_path();
             } while (folderPath != folderPath.root_path());
 
-            if (fs::is_symlink(gameDir / filePath)) {
-                if (fs::read_symlink(gameDir / filePath) != MountDir / filePath) {
-                    fs::remove(gameDir / filePath); // remove if exists and is invalid
-                    fs::create_symlink(MountDir / filePath, gameDir / filePath);
+            if (fs::is_symlink(filePath)) {
+                if (fs::read_symlink(filePath) != MountDir / file.FileName) {
+                    LOG_DEBUG("Replacing symlink %s", file.FileName.c_str());
+                    fs::remove(filePath, ec); // remove if exists and is invalid
+                    if (!ec) {
+                        fs::create_symlink(MountDir / file.FileName, filePath, ec);
+                    }
+                    if (ec) {
+                        LOG_ERROR("Can't replace symlink %s, error %s", filePath, ec.message().c_str());
+                    }
+                    else {
+                        LOG_DEBUG("Set up %s", file.FileName.c_str());
+                    }
                 }
             }
             else {
-                fs::create_symlink(MountDir / filePath, gameDir / filePath);
+                LOG_DEBUG("Creating symlink %s", file.FileName.c_str());
+                fs::create_symlink(MountDir / file.FileName, filePath, ec);
+                if (ec) {
+                    LOG_ERROR("Can't create symlink %s, error %s", filePath, ec.message().c_str());
+                }
+                else {
+                    LOG_DEBUG("Set up %s", file.FileName.c_str());
+                }
             }
         });
     }
-    LOG_DEBUG("Cancel notified");
     for (auto& thread : threads) {
         thread.join();
     }
@@ -318,7 +317,6 @@ void MountedBuild::PreloadAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHa
             onProg();
         });
     }
-    LOG_DEBUG("Cancel notified");
     for (auto& thread : threads) {
         thread.join();
     }
@@ -366,7 +364,6 @@ void MountedBuild::VerifyAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHan
             onProg();
         }));
     }
-    LOG_DEBUG("Cancel notified");
     for (auto& thread : threads) {
         thread.join();
     }
