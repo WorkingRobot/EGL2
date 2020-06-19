@@ -1,4 +1,5 @@
 APP_ICON ICON "icon.ico"
+SPLASH_ICON ICON "splash.ico"
 
 #include "gui/localedefs.h"
 #define STR(N) #N

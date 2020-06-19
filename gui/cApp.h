@@ -14,6 +14,9 @@ public:
 	~cApp();
 
 	virtual bool OnInit();
+	bool InitThread();
+
+	wxWindow* SplashWindow = nullptr;
 
 	fs::path DataFolder;
 	FILE* LogFile = nullptr;

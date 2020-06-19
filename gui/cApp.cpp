@@ -8,6 +8,7 @@
 #include "../checks/winfspcheck.h"
 #include "../Logger.h"
 #include "../storage/EGSProvider.h"
+#include "cSplash.h"
 #include "Localization.h"
 
 #include <ShlObj_core.h>
@@ -31,6 +32,17 @@ cApp::~cApp() {
 }
 
 bool cApp::OnInit() {
+	SplashWindow = new cSplash();
+	SplashWindow->Show();
+	std::thread([this] {
+		if (!InitThread()) {
+			this->Exit();
+		}
+	}).detach();
+	return true;
+}
+
+bool cApp::InitThread() {
 	Logger::Setup();
 	std::ostringstream preLogStream;
 	Logger::Callback = [&preLogStream](Logger::LogLevel level, const char* section, const char* str) {
@@ -204,9 +216,12 @@ bool cApp::OnInit() {
 		wxLaunchDefaultBrowser(verifUrl);
 	});
 
-	LOG_INFO("Setting up cMain");
-	new cMain(this, DataFolder / "config", DataFolder / "manifests", AuthDetails);
+	this->CallAfter([this] {
+		LOG_INFO("Setting up cMain");
+		new cMain(this, DataFolder / "config", DataFolder / "manifests", AuthDetails);
 
-	LOG_DEBUG("Set up cApp");
+		SplashWindow->Close();
+		LOG_DEBUG("Set up cApp");
+	});
 	return true;
 }
