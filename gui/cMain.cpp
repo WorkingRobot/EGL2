@@ -1,4 +1,4 @@
-#include "cMain.h"
+﻿#include "cMain.h"
 
 #define CMAIN_W				550
 #define CMAIN_H				330
@@ -108,13 +108,13 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 	int statColInd = 0;
 
 	CREATE_STAT(cpu, LSTR(MAIN_STATS_CPU), 1000); // divide by 10 to get %
-	CREATE_STAT(ram, LSTR(MAIN_STATS_RAM), 384 * 1024 * 1024); // 384 mb
+	CREATE_STAT(ram, LSTR(MAIN_STATS_RAM), 512 * 1024 * 1024); // 512 mb
 	CREATE_STAT(read, LSTR(MAIN_STATS_READ), 256 * 1024 * 1024); // 256 mb/s
 	CREATE_STAT(write, LSTR(MAIN_STATS_WRITE), 64 * 1024 * 1024); // 64 mb/s
 	CREATE_STAT(provide, LSTR(MAIN_STATS_PROVIDE), 256 * 1024 * 1024); // 256 mb/s
 	CREATE_STAT(download, LSTR(MAIN_STATS_DOWNLOAD), 64 * 1024 * 1024); // 512 mbps
 	CREATE_STAT(latency, LSTR(MAIN_STATS_LATENCY), 1000); // divide by 10 to get ms
-	CREATE_STAT(threads, LSTR(MAIN_STATS_THREADS), 128); // 128 threads (threads don't ruin performance, probably just indicates overhead)
+	CREATE_STAT(threads, LSTR(MAIN_STATS_THREADS), 192); // 192 threads (threads don't ruin performance, probably just indicates overhead)
 
 	statsSizer->Add(statsSizerL);
 	statsSizer->AddStretchSpacer();
@@ -174,13 +174,13 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 	this->Raise();
 	this->SetFocus();
 
-	Stats::StartUpdateThread(ch::milliseconds(500), [this](StatsUpdateData& data) {
+	Stats::StartUpdateThread(ch::milliseconds(1000), [this](StatsUpdateData& data) {
 		STAT_VALUE(cpu)->SetValue(1000);
 		STAT_VALUE(cpu)->SetValue(std::min(data.cpu * 10, 1000.f));
 		STAT_TEXT(cpu)->SetLabel(data.cpu > 0 ? wxString::Format("%.*f%%", std::max(2 - (int)floor(log10(data.cpu)), 1), data.cpu) : "0.00%");
 
-		STAT_VALUE(ram)->SetValue(384 * 1024 * 1024);
-		STAT_VALUE(ram)->SetValue(std::min(data.ram, (size_t)384 * 1024 * 1024));
+		STAT_VALUE(ram)->SetValue(512 * 1024 * 1024);
+		STAT_VALUE(ram)->SetValue(std::min(data.ram, (size_t)512 * 1024 * 1024));
 		STAT_TEXT(ram)->SetLabel(Stats::GetReadableSize(data.ram));
 
 		STAT_VALUE(read)->SetValue(256 * 1024 * 1024);
@@ -203,8 +203,8 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 		STAT_VALUE(latency)->SetValue(std::min(data.latency * 10, 1000.f));
 		STAT_TEXT(latency)->SetLabel(data.latency > 0 ? wxString::Format("%.*f ms", std::max(2 - (int)floor(log10(data.latency)), 1), data.latency) : "0 ms");
 
-		STAT_VALUE(threads)->SetValue(128);
-		STAT_VALUE(threads)->SetValue(std::min(data.threads, 128));
+		STAT_VALUE(threads)->SetValue(192);
+		STAT_VALUE(threads)->SetValue(std::min(data.threads, 192));
 		STAT_TEXT(threads)->SetLabel(wxString::Format("%d", data.threads));
 		return true;
 	});
