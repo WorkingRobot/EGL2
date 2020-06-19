@@ -65,9 +65,7 @@ std::shared_ptr<char[]> Storage::GetChunk(std::shared_ptr<Chunk> Chunk, cancel_f
         auto chunkData = DownloadChunk(Chunk, flag);
         if (chunkData.first)
         {
-            std::unique_lock<std::mutex> lck(data.Mutex);
-            data.Buffer = chunkData.first;
-            data.BufferSize = chunkData.second;
+            data.Buffer = chunkData;
             data.Status = CHUNK_STATUS::Readable;
             data.CV.notify_all();
         }
@@ -102,9 +100,7 @@ std::shared_ptr<char[]> Storage::GetChunk(std::shared_ptr<Chunk> Chunk, cancel_f
         }
         
         {
-            std::unique_lock<std::mutex> lck(data.Mutex);
-            data.Buffer = chunkData.first;
-            data.BufferSize = chunkData.second;
+            data.Buffer = chunkData;
             data.Status = CHUNK_STATUS::Readable;
             data.CV.notify_all();
         }
@@ -114,11 +110,9 @@ std::shared_ptr<char[]> Storage::GetChunk(std::shared_ptr<Chunk> Chunk, cancel_f
     case CHUNK_STATUS::Reading:  // reading from file, wait until mutex releases
     {
         std::unique_lock<std::mutex> lck(data.Mutex);
-        while (data.Status != CHUNK_STATUS::Readable) {
-            SAFE_FLAG_RETURN(nullptr);
-            data.CV.wait(lck);
-        }
-
+        std::unique_lock<std::mutex> lk(data.CV_Mutex);
+        data.CV.wait(lk, [&] { return data.Status == CHUNK_STATUS::Readable || flag.cancelled(); });
+        SAFE_FLAG_RETURN(nullptr);
         break;
     }
     case CHUNK_STATUS::Readable: // available in memory pool
@@ -129,7 +123,7 @@ std::shared_ptr<char[]> Storage::GetChunk(std::shared_ptr<Chunk> Chunk, cancel_f
         // h o w
         break;
     }
-    return data.Buffer;
+    return data.Buffer.first;
 }
 
 std::shared_ptr<char[]> Storage::GetChunkPart(ChunkPart& ChunkPart, cancel_flag& flag)
@@ -161,7 +155,6 @@ CHUNK_POOL_DATA& Storage::GetPoolData(std::shared_ptr<Chunk> Chunk)
 
     auto& data = ChunkPool.emplace_back();
     data.first = Chunk->Guid;
-    data.second.Buffer = std::unique_ptr<char[]>();
     data.second.Status = GetUnpooledChunkStatus(Chunk);
     return data.second;
 }
@@ -209,7 +202,7 @@ Compressor::buffer_value Storage::DownloadChunk(std::shared_ptr<Chunk> Chunk, ca
 {
     std::shared_ptr<char[]> data;
 
-    if (!forceDownload && EGSProvider::IsChunkAvailable(Chunk)) {
+    if (!forceDownload && EGSProvider::Available() && EGSProvider::IsChunkAvailable(Chunk)) {
         data = EGSProvider::GetChunk(Chunk);
     }
     if (!data) { // EGSProvider GetChunk could return nullptr

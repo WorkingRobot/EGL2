@@ -229,6 +229,8 @@ bool Client::Execute(const std::shared_ptr<curlion::HttpConnection>& connection,
     char errbuf[CURL_ERROR_SIZE];
     curl_easy_setopt(connection->GetHandle(), CURLOPT_ERRORBUFFER, errbuf);
 
+    connection->SetTimeoutInMilliseconds(120000); // tcp connect timeout
+
     int retryCount = 5;
     FILE* vFp = nullptr;
     do {
@@ -239,7 +241,7 @@ bool Client::Execute(const std::shared_ptr<curlion::HttpConnection>& connection,
         }
 
         SAFE_FLAG_RETURN(false);
-        connection->Start();
+        connection->Start(125000);
         SAFE_FLAG_RETURN(false);
 
         if (connection->GetResult() != CURLE_OK) {
@@ -259,6 +261,7 @@ bool Client::Execute(const std::shared_ptr<curlion::HttpConnection>& connection,
         }
 
         LOG_WARN("Retrying...");
+        connection->Clone();
     } while (--retryCount);
 
 
@@ -300,5 +303,6 @@ FILE* Client::CreateTempFile()
         return NULL;
     }
 
+    LOG_DEBUG("TEMP FILE %s", fn);
     return fp;
 }

@@ -2,6 +2,9 @@
 #include "socket_factory.h"
 #include "log.h"
 
+#include <condition_variable>
+#include <thread>
+
 #ifdef WIN32
 #undef min
 #endif
@@ -44,21 +47,42 @@ void Connection::SetInitialOptions() {
     curl_easy_setopt(handle_, CURLOPT_XFERINFOFUNCTION, CurlProgressCallback);
     curl_easy_setopt(handle_, CURLOPT_XFERINFODATA, this);
 }
+
     
+void Connection::Start(int timeoutMs) {
     
-void Connection::Start() {
-    
-    if (! is_running_) {
+    if (!is_running_) {
         WillStart();
-        CURLcode result = curl_easy_perform(handle_);
-        DidFinish(result);
+        CURLcode result = CURL_LAST;
+
+        std::mutex mx;
+        std::condition_variable cv;
+        auto performThread = std::thread([&](CURL* handle, std::chrono::steady_clock::time_point expireTime) {
+            auto res = curl_easy_perform(handle);
+            if (std::chrono::steady_clock::now() < expireTime) {
+                result = res;
+                cv.notify_all();
+            }
+            else {
+                curl_easy_cleanup(handle);
+            }
+        }, handle_, std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs));
+        performThread.detach();
+
+        std::unique_lock<std::mutex> lk(mx);
+        if (cv.wait_for(lk, std::chrono::milliseconds(timeoutMs), [&] { return result != CURL_LAST; })) {
+            DidFinish(result);
+        }
+        else {
+            DidFinish(CURLE_OPERATION_TIMEDOUT);
+            TerminateThread(performThread.native_handle(), 1);
+        }
     }
 }
     
-    
 void Connection::ResetOptions() {
     
-    if (! is_running_) {
+    if (!is_running_) {
         curl_easy_reset(handle_);
         SetInitialOptions();
         ResetOptionResources();
@@ -216,6 +240,11 @@ void Connection::DidFinish(CURLcode result) {
 }
 
     
+void Connection::Clone()
+{
+    handle_ = curl_easy_duphandle(handle_);
+}
+
 long Connection::GetResponseCode() const {
     
     long response_code = 0;

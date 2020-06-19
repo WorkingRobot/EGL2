@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <chrono>
 #include <functional>
 #include <map>
 #include <memory>
@@ -260,7 +261,7 @@ public:
      If the connection is already started, this method takes no effects.
      Use ConnectionManager to start connections if you wish a non-blocking manner.
      */
-    void Start();
+    void Start(int timeoutMs);
     
     /**
      Reset all options to default.
@@ -467,6 +468,14 @@ public:
     CURLcode GetResult() const {
         return result_;
     }
+
+    /**
+     Clone internal connection.
+
+     Options all stay the same, but all connections and handles are different. This doesn't cleanup the old handle!
+     https://curl.haxx.se/libcurl/c/curl_easy_duphandle.html
+     */
+    void Clone();
     
     /**
      Get the last response code.

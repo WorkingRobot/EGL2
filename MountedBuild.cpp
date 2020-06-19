@@ -236,6 +236,9 @@ void MountedBuild::SetupGameDirectory(ProgressSetMaxHandler setMax, ProgressIncr
                         LOG_DEBUG("Preloading %s", file.FileName.c_str());
                         PreloadFile(file, threadCount, flag);
                         LOG_DEBUG("Copying %s", file.FileName.c_str());
+                        if (!fs::remove(filePath, ec)) {
+                            LOG_ERROR("Could not delete file to overwrite %s, error %s", filePath.string().c_str(), ec.message().c_str());
+                        }
                         if (!fs::copy_file(MountDir / file.FileName, filePath, fs::copy_options::overwrite_existing, ec)) {
                             LOG_ERROR("Could not copy file %s, error %s", filePath.string().c_str(), ec.message().c_str());
                         }
@@ -293,30 +296,53 @@ void MountedBuild::PreloadAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHa
     });
 
     std::deque<std::thread> threads;
-    threads.emplace_back([&, this]() {
-            setMax(GetMissingChunkCount());
-    });
+    std::deque<std::atomic<bool>> threadCompletions;
 
+    {
+        auto& completion = threadCompletions.emplace_back(false);
+        threads.emplace_back([&, this]() {
+            setMax(GetMissingChunkCount());
+            completion = true;
+        });
+    }
+
+    std::mutex mx;
+    std::condition_variable cv;
+    Client::SetPoolSize(threadCount);
     for (auto& chunk : Build.ChunkManifestList) {
         if (StorageData.IsChunkDownloaded(chunk)) {
             continue;
         }
 
-        // lightweight "semaphore"
-        while (threads.size() >= threadCount) {
+        // ensures that at < 128 threads are active here
+        if (std::count(threadCompletions.begin(), threadCompletions.end(), false) >= threadCount) {
+            std::unique_lock<std::mutex> lk(mx);
+            cv.wait(lk, [&] { return std::count(threadCompletions.begin(), threadCompletions.end(), false) < threadCount; });
+        }
+        int i = 0;
+        while (threadCompletions.front()) { // removes all the front values that have been completed
             threads.front().join();
             threads.pop_front();
+            threadCompletions.pop_front();
+            ++i;
+        }
+        if (i) {
+            LOG_DEBUG("Popped %d threads", i);
         }
 
         if (flag.cancelled()) {
             break;
         }
         
+        auto& completion = threadCompletions.emplace_back(false);
         threads.emplace_back([&, this]() {
-            StorageData.GetChunk(chunk, flag);
+            StorageData.DownloadChunk(chunk, flag);
             onProg();
+            completion = true;
+            cv.notify_all();
         });
     }
+    Client::SetPoolSize(0);
     for (auto& thread : threads) {
         thread.join();
     }

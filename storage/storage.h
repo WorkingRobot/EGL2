@@ -39,10 +39,9 @@ enum class CHUNK_STATUS {
 };
 
 struct CHUNK_POOL_DATA {
-    std::shared_ptr<char[]> Buffer;
-    uint32_t BufferSize;
+    std::pair<std::shared_ptr<char[]>, size_t> Buffer;
     std::condition_variable CV;
-    std::mutex Mutex;
+    std::mutex CV_Mutex;
     std::atomic<CHUNK_STATUS> Status;
 };
 
