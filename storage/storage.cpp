@@ -109,7 +109,6 @@ std::shared_ptr<char[]> Storage::GetChunk(std::shared_ptr<Chunk> Chunk, cancel_f
     case CHUNK_STATUS::Grabbing: // downloading from server, wait until mutex releases
     case CHUNK_STATUS::Reading:  // reading from file, wait until mutex releases
     {
-        std::unique_lock<std::mutex> lck(data.Mutex);
         std::unique_lock<std::mutex> lk(data.CV_Mutex);
         data.CV.wait(lk, [&] { return data.Status == CHUNK_STATUS::Readable || flag.cancelled(); });
         SAFE_FLAG_RETURN(nullptr);
