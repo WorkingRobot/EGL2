@@ -6,7 +6,7 @@
 #include "../web/personal/PersonalAuth.h"
 #include "cSetup.h"
 #include "cProgress.h"
-#include "UpdateChecker.h"
+#include "GameUpdateChecker.h"
 #include "settings.h"
 
 #include <wx/taskbar.h>
@@ -83,7 +83,7 @@ private:
 	fs::path SettingsPath;
 	SETTINGS Settings;
 
-	std::unique_ptr<UpdateChecker> Checker;
+	std::unique_ptr<GameUpdateChecker> GameChecker;
 	std::unique_ptr<MountedBuild> Build;
 
 	friend class SystrayIcon;

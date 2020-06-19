@@ -1,4 +1,4 @@
-﻿#include "cMain.h"
+#include "cMain.h"
 
 #define CMAIN_W				550
 #define CMAIN_H				330
@@ -216,11 +216,11 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 	std::thread([=]() {
 		SetStatus(LSTR(MAIN_STATUS_STARTING));
 		LOG_DEBUG("Creating update checker");
-		Checker = std::make_unique<UpdateChecker>(
+		GameChecker = std::make_unique<GameUpdateChecker>(
 			manifestPath,
 			[this](const std::string& Url, const std::string& Version) { OnUpdate(Version, Url); },
 			SettingsGetUpdateInterval(&Settings));
-		Mount(Checker->GetLatestUrl());
+		Mount(GameChecker->GetLatestUrl());
 		LOG_DEBUG("Enabling buttons");
 		SetStatus(LSTR(MAIN_STATUS_PLAYABLE));
 		SIDE_BUTTON_OBJ(verify)->Enable();
@@ -229,7 +229,7 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 		auto ct = Build->GetMissingChunkCount();
 		LOG_DEBUG("%d missing chunks", ct);
 		if (ct) {
-			OnUpdate(Checker->GetLatestVersion());
+			OnUpdate(GameChecker->GetLatestVersion());
 		}
 	}).detach();
 
@@ -262,8 +262,8 @@ void cMain::OnSettingsClicked(bool onStartup) {
 				LOG_ERROR("Could not open settings file to write");
 			}
 		}, &SettingsValidate, [this]() {
-			if (Checker) {
-				Checker->SetInterval(SettingsGetUpdateInterval(&Settings));
+			if (GameChecker) {
+				GameChecker->SetInterval(SettingsGetUpdateInterval(&Settings));
 			}
 			SetupWnd.reset();
 			this->Raise();
@@ -398,7 +398,7 @@ void cMain::OnUpdate(const std::string& Version, const std::optional<std::string
 	}
 
 	CallAfter([=]() {
-		auto notif = new wxGenericNotificationMessage(LSTR(MAIN_NOTIF_TITLE), wxString::Format(LSTR(MAIN_NOTIF_DESC), UpdateChecker::GetReadableVersion(Version)), this);
+		auto notif = new wxGenericNotificationMessage(LSTR(MAIN_NOTIF_TITLE), wxString::Format(LSTR(MAIN_NOTIF_DESC), GameUpdateChecker::GetReadableVersion(Version)), this);
 		notif->SetIcon(wxICON(APP_ICON));
 		if (!notif->AddAction(42, LSTR(MAIN_NOTIF_ACTION))) {
 			LOG_WARN("Actions aren't supported");
@@ -449,7 +449,7 @@ void cMain::Mount(const std::string& Url) {
 	LOG_INFO("Setting up cache directory");
 	MountedBuild::SetupCacheDirectory(Settings.CacheDir);
 	LOG_INFO("Mounting new url: %s", Url.c_str());
-	Build.reset(new MountedBuild(Checker->GetManifest(Url), fs::path(Settings.CacheDir) / MOUNT_FOLDER, Settings.CacheDir, SettingsGetStorageFlags(&Settings), Settings.BufferCount));
+	Build.reset(new MountedBuild(GameChecker->GetManifest(Url), fs::path(Settings.CacheDir) / MOUNT_FOLDER, Settings.CacheDir, SettingsGetStorageFlags(&Settings), Settings.BufferCount));
 	LOG_INFO("Setting up game dir");
 	Build->SetupGameDirectory([](unsigned int m) {}, []() {}, []() {}, cancel_flag(), Settings.ThreadCount);
 }

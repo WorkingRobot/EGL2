@@ -11,10 +11,10 @@ namespace fs = std::filesystem;
 
 typedef std::function<void(const std::string& Url, const std::string& Version)> UpdateCallback;
 
-class UpdateChecker {
+class GameUpdateChecker {
 public:
-	UpdateChecker(fs::path cachePath, UpdateCallback callback, std::chrono::milliseconds checkInterval);
-	~UpdateChecker();
+	GameUpdateChecker(fs::path cachePath, UpdateCallback callback, std::chrono::milliseconds checkInterval);
+	~GameUpdateChecker();
 
 	void SetInterval(std::chrono::milliseconds newInterval);
 
