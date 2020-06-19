@@ -8,6 +8,7 @@
 #include "cProgress.h"
 #include "GameUpdateChecker.h"
 #include "settings.h"
+#include "UpdateChecker.h"
 
 #include <wx/taskbar.h>
 #include <wx/windowptr.h>
@@ -62,9 +63,6 @@ protected:
 
 	void SetStatus(const wxString& string);
 
-	void OnUpdate(const std::string& Version, const std::optional<std::string>& Url = std::nullopt);
-	void BeginUpdate();
-
 private:
 	void Mount(const std::string& Url);
 
@@ -77,13 +75,22 @@ private:
 	bool FirstAuthLaunched = false;
 	std::shared_ptr<PersonalAuth> Auth;
 
-	bool UpdateAvailable;
-	std::optional<std::string> UpdateUrl;
+	std::unique_ptr<GameUpdateChecker> GameUpdater;
+	bool GameUpdateAvailable;
+	std::optional<std::string> GameUpdateUrl;
+
+	void OnGameUpdate(const std::string& Version, const std::optional<std::string>& Url = std::nullopt);
+	void BeginGameUpdate();
+
+	std::unique_ptr<UpdateChecker> Updater;
+	std::string UpdateUrl;
+
+	void OnUpdate(const UpdateInfo& Info);
+	void BeginUpdate();
 	
 	fs::path SettingsPath;
 	SETTINGS Settings;
 
-	std::unique_ptr<GameUpdateChecker> GameChecker;
 	std::unique_ptr<MountedBuild> Build;
 
 	friend class SystrayIcon;

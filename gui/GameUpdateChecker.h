@@ -9,11 +9,11 @@
 
 namespace fs = std::filesystem;
 
-typedef std::function<void(const std::string& Url, const std::string& Version)> UpdateCallback;
+typedef std::function<void(const std::string& Url, const std::string& Version)> GameUpdateCallback;
 
 class GameUpdateChecker {
 public:
-	GameUpdateChecker(fs::path cachePath, UpdateCallback callback, std::chrono::milliseconds checkInterval);
+	GameUpdateChecker(fs::path cachePath, GameUpdateCallback callback, std::chrono::milliseconds checkInterval);
 	~GameUpdateChecker();
 
 	void SetInterval(std::chrono::milliseconds newInterval);
@@ -49,7 +49,7 @@ private:
 	std::string LatestUrl;
 	std::string LatestVersion;
 
-	UpdateCallback Callback;
+	GameUpdateCallback Callback;
 	std::thread UpdateThread;
 	std::chrono::steady_clock::time_point UpdateWakeup;
 	cancel_flag UpdateFlag;

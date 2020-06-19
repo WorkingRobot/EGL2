@@ -281,6 +281,11 @@ public:
      Set the URL used in connection.
      */
     void SetUrl(const std::string& url);
+
+    /**
+     Set the user agent used in connection.
+     */
+    void SetUserAgent(const std::string& agent);
     
     /**
      Set the proxy used in connection.

@@ -125,6 +125,11 @@ void Connection::SetUrl(const std::string& url) {
     curl_easy_setopt(handle_, CURLOPT_URL, url.c_str());
 }
 
+void Connection::SetUserAgent(const std::string& agent)
+{
+    curl_easy_setopt(handle_, CURLOPT_USERAGENT, agent.c_str());
+}
+
 
 void Connection::SetProxy(const std::string& proxy) {
     curl_easy_setopt(handle_, CURLOPT_PROXY, proxy.c_str());

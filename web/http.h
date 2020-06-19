@@ -4,6 +4,8 @@
 // the only reason this is IOS and not PC is that PC can't create device auths :(
 #define BASIC_FN_AUTH "basic MzQ0NmNkNzI2OTRjNGE0NDg1ZDgxYjc3YWRiYjIxNDE6OTIwOWQ0YTVlMjVhNDU3ZmI5YjA3NDg5ZDMxM2I0MWE="
 
+#define NOMINMAX
+
 #include "http/Client.h"
 
 #include <vector>

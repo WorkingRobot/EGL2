@@ -63,7 +63,7 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 	SettingsPath(settingsPath),
 	Settings(SettingsDefault()),
 	Auth(personalAuth),
-	UpdateAvailable(false) {
+	GameUpdateAvailable(false) {
 	LOG_DEBUG("Setting up (%s, %s)", settingsPath.string().c_str(), manifestPath.string().c_str());
 
 	this->SetIcon(wxICON(APP_ICON));
@@ -215,12 +215,12 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 
 	std::thread([=]() {
 		SetStatus(LSTR(MAIN_STATUS_STARTING));
-		LOG_DEBUG("Creating update checker");
-		GameChecker = std::make_unique<GameUpdateChecker>(
+		LOG_DEBUG("Creating game update checker");
+		GameUpdater = std::make_unique<GameUpdateChecker>(
 			manifestPath,
-			[this](const std::string& Url, const std::string& Version) { OnUpdate(Version, Url); },
+			[this](const std::string& Url, const std::string& Version) { OnGameUpdate(Version, Url); },
 			SettingsGetUpdateInterval(&Settings));
-		Mount(GameChecker->GetLatestUrl());
+		Mount(GameUpdater->GetLatestUrl());
 		LOG_DEBUG("Enabling buttons");
 		SetStatus(LSTR(MAIN_STATUS_PLAYABLE));
 		SIDE_BUTTON_OBJ(verify)->Enable();
@@ -229,8 +229,17 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 		auto ct = Build->GetMissingChunkCount();
 		LOG_DEBUG("%d missing chunks", ct);
 		if (ct) {
-			OnUpdate(GameChecker->GetLatestVersion());
+			OnGameUpdate(GameUpdater->GetLatestVersion());
 		}
+	}).detach();
+
+
+	std::thread([=]() {
+		LOG_DEBUG("Creating update checker");
+		Updater = std::make_unique<UpdateChecker>(
+			[this](const UpdateInfo& Info) { OnUpdate(Info); },
+			ch::milliseconds(5 * 60 * 1000)); // every 5 minutes, both for ratelimiting purposes and no real reason to be lower
+		LOG_DEBUG("Created update checker");
 	}).detach();
 
 	Systray = new SystrayIcon(this);
@@ -262,8 +271,8 @@ void cMain::OnSettingsClicked(bool onStartup) {
 				LOG_ERROR("Could not open settings file to write");
 			}
 		}, &SettingsValidate, [this]() {
-			if (GameChecker) {
-				GameChecker->SetInterval(SettingsGetUpdateInterval(&Settings));
+			if (GameUpdater) {
+				GameUpdater->SetInterval(SettingsGetUpdateInterval(&Settings));
 			}
 			SetupWnd.reset();
 			this->Raise();
@@ -327,8 +336,8 @@ void cMain::OnVerifyClicked() {
 }
 
 void cMain::OnPlayClicked() {
-	if (UpdateAvailable) {
-		BeginUpdate();
+	if (GameUpdateAvailable) {
+		BeginGameUpdate();
 	}
 	else {
 		if (FirstAuthLaunched) {
@@ -389,16 +398,77 @@ void cMain::SetStatus(const wxString& string) {
 	statusBar->SetLabel(string);
 }
 
-void cMain::OnUpdate(const std::string& Version, const std::optional<std::string>& Url)
+void cMain::Mount(const std::string& Url) {
+	LOG_INFO("Setting up cache directory");
+	MountedBuild::SetupCacheDirectory(Settings.CacheDir);
+	LOG_INFO("Mounting new url: %s", Url.c_str());
+	Build.reset(new MountedBuild(GameUpdater->GetManifest(Url), fs::path(Settings.CacheDir) / MOUNT_FOLDER, Settings.CacheDir, SettingsGetStorageFlags(&Settings), Settings.BufferCount));
+	LOG_INFO("Setting up game dir");
+	Build->SetupGameDirectory([](unsigned int m) {}, []() {}, []() {}, cancel_flag(), Settings.ThreadCount);
+}
+
+void cMain::OnGameUpdate(const std::string& Version, const std::optional<std::string>& Url)
 {
-	UpdateAvailable = true;
+	GameUpdateAvailable = true;
 	playBtn->SetLabel(LSTR(MAIN_BTN_UPDATE));
 	if (Url.has_value()) {
-		UpdateUrl = Url;
+		GameUpdateUrl = Url;
 	}
 
 	CallAfter([=]() {
 		auto notif = new wxGenericNotificationMessage(LSTR(MAIN_NOTIF_TITLE), wxString::Format(LSTR(MAIN_NOTIF_DESC), GameUpdateChecker::GetReadableVersion(Version)), this);
+		notif->SetIcon(wxICON(APP_ICON));
+		if (!notif->AddAction(42, LSTR(MAIN_NOTIF_ACTION))) {
+			LOG_WARN("Actions aren't supported");
+		}
+		notif->Bind(wxEVT_NOTIFICATION_MESSAGE_ACTION, std::bind(&cMain::BeginGameUpdate, this));
+		notif->Bind(wxEVT_NOTIFICATION_MESSAGE_CLICK, std::bind(&cMain::BeginGameUpdate, this));
+		if (!notif->Show(wxNotificationMessage::Timeout_Never)) {
+			LOG_ERROR("Couldn't launch game update notification");
+		}
+	});
+}
+
+void cMain::BeginGameUpdate()
+{
+	if (UpdateWnd) {
+		UpdateWnd->Restore();
+		UpdateWnd->Raise();
+		UpdateWnd->SetFocus();
+		return;
+	}
+
+	if (!GameUpdateAvailable) {
+		return;
+	}
+	std::thread([this]() {
+		if (!GameUpdateUrl.has_value()) {
+			LOG_DEBUG("Downloading unavailable chunks");
+		}
+		else {
+			LOG_DEBUG("Beginning update: %s", GameUpdateUrl->c_str());
+			Mount(*GameUpdateUrl);
+		}
+
+		this->CallAfter([this]() {
+			RUN_PROGRESS(LSTR(MAIN_PROG_UPDATE), UpdateWnd, [this](bool cancelled) {
+				LOG_DEBUG("EXIT NOTICED");
+				if (!cancelled) {
+					GameUpdateAvailable = false;
+					playBtn->SetLabel(LSTR(MAIN_BTN_PLAY));
+					GameUpdateUrl.reset();
+				}
+			}, PreloadAllChunks, Settings.ThreadCount);
+		});
+	}).detach();
+}
+
+void cMain::OnUpdate(const UpdateInfo& Info)
+{
+	UpdateUrl = Info.Url;
+
+	CallAfter([=]() {
+		auto notif = new wxGenericNotificationMessage("New EGL2 Update!", wxString::Format("%s is now available!\n%s, %d downloads", Info.Version, Stats::GetReadableSize(Info.DownloadSize), Info.DownloadCount), this);
 		notif->SetIcon(wxICON(APP_ICON));
 		if (!notif->AddAction(42, LSTR(MAIN_NOTIF_ACTION))) {
 			LOG_WARN("Actions aren't supported");
@@ -413,43 +483,9 @@ void cMain::OnUpdate(const std::string& Version, const std::optional<std::string
 
 void cMain::BeginUpdate()
 {
-	if (UpdateWnd) {
-		UpdateWnd->Restore();
-		UpdateWnd->Raise();
-		UpdateWnd->SetFocus();
+	if (UpdateUrl.empty()) {
 		return;
 	}
-
-	if (!UpdateAvailable) {
-		return;
-	}
-	std::thread([this]() {
-		if (!UpdateUrl.has_value()) {
-			LOG_DEBUG("Downloading unavailable chunks");
-		}
-		else {
-			LOG_DEBUG("Beginning update: %s", UpdateUrl->c_str());
-			Mount(*UpdateUrl);
-		}
-
-		this->CallAfter([this]() {
-			RUN_PROGRESS(LSTR(MAIN_PROG_UPDATE), UpdateWnd, [this](bool cancelled) {
-				LOG_DEBUG("EXIT NOTICED");
-				if (!cancelled) {
-					UpdateAvailable = false;
-					playBtn->SetLabel(LSTR(MAIN_BTN_PLAY));
-					UpdateUrl.reset();
-				}
-			}, PreloadAllChunks, Settings.ThreadCount);
-		});
-	}).detach();
-}
-
-void cMain::Mount(const std::string& Url) {
-	LOG_INFO("Setting up cache directory");
-	MountedBuild::SetupCacheDirectory(Settings.CacheDir);
-	LOG_INFO("Mounting new url: %s", Url.c_str());
-	Build.reset(new MountedBuild(GameChecker->GetManifest(Url), fs::path(Settings.CacheDir) / MOUNT_FOLDER, Settings.CacheDir, SettingsGetStorageFlags(&Settings), Settings.BufferCount));
-	LOG_INFO("Setting up game dir");
-	Build->SetupGameDirectory([](unsigned int m) {}, []() {}, []() {}, cancel_flag(), Settings.ThreadCount);
+	wxLaunchDefaultBrowser(UpdateUrl);
+	UpdateUrl.clear();
 }

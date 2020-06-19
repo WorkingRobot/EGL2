@@ -1,0 +1,9 @@
+#pragma once
+
+#define VERSION_MAJOR 1
+#define VERSION_MINOR 3
+#define VERSION_PATCH 2
+
+#define STR_INDIR(x) #x
+#define STR(x) STR_INDIR(x)
+#define VERSION_STRING STR(VERSION_MAJOR) "." STR(VERSION_MINOR) "." STR(VERSION_PATCH)

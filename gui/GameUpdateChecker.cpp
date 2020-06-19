@@ -1,19 +1,19 @@
 #include "GameUpdateChecker.h"
 
 #ifndef LOG_SECTION
-#define LOG_SECTION "UpdateChecker"
+#define LOG_SECTION "GameUpdateChecker"
 #endif
 
 #include "../Logger.h"
 
-GameUpdateChecker::GameUpdateChecker(fs::path cachePath, UpdateCallback callback, std::chrono::milliseconds checkInterval) :
+GameUpdateChecker::GameUpdateChecker(fs::path cachePath, GameUpdateCallback callback, std::chrono::milliseconds checkInterval) :
 	Auth(cachePath),
 	Callback(callback),
 	CheckInterval(checkInterval)
 {
 	LOG_DEBUG("Initializing force update");
 	ForceUpdate();
-	LOG_DEBUG("Creating update thread");
+	LOG_DEBUG("Creating game update thread");
 	UpdateThread = std::thread(&GameUpdateChecker::Thread, this);
 	UpdateThread.detach(); // causes some exception when the deconstructer is trying to join it otherwise
 }
