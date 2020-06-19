@@ -21,6 +21,9 @@ cApp::cApp() {
 }
 
 cApp::~cApp() {
+	if (InstanceChecker) {
+		delete InstanceChecker;
+	}
 	LOG_INFO("Deconst cApp");
 	if (LogFile) {
 		fclose(LogFile);
@@ -148,6 +151,47 @@ bool cApp::OnInit() {
 			EnableDeveloperMode();
 			LOG_INFO("Set up developer mode");
 		}
+	}
+	if (IsUserAdmin()) { // basically just relaunches in user mode because folder permissions
+		// taken from https://docs.microsoft.com/en-us/archive/blogs/aaron_margosis/faq-how-do-i-start-a-program-as-the-desktop-user-from-an-elevated-app
+		DWORD dwPID;
+		GetWindowThreadProcessId(GetShellWindow(), &dwPID);
+
+		HANDLE hShellProcess = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, dwPID);
+
+		HANDLE hShellProcessToken;
+		OpenProcessToken(hShellProcess, TOKEN_DUPLICATE, &hShellProcessToken);
+
+		constexpr DWORD dwTokenRights = TOKEN_QUERY | TOKEN_ASSIGN_PRIMARY | TOKEN_DUPLICATE | TOKEN_ADJUST_DEFAULT | TOKEN_ADJUST_SESSIONID;
+		HANDLE hPrimaryToken;
+		DuplicateTokenEx(hShellProcessToken, dwTokenRights, NULL, SecurityImpersonation, TokenPrimary, &hPrimaryToken);
+
+		auto cmd = GetCommandLine();
+		int l = wcslen(argv[0].wc_str());
+		if (cmd == wcsstr(cmd, argv[0].wc_str()))
+		{
+			cmd = cmd + l;
+			while (*cmd && isspace(*cmd))
+				++cmd;
+		}
+
+		PROCESS_INFORMATION pi;
+		STARTUPINFO si;
+
+		memset(&pi, 0, sizeof(pi));
+		memset(&si, 0, sizeof(si));
+		si.cb = sizeof(si);
+
+		if (CreateProcessWithTokenW(hPrimaryToken, 0, argv[0].wc_str(), cmd, 0, NULL, NULL, &si, &pi))
+		{
+			CloseHandle(pi.hProcess);
+			CloseHandle(pi.hThread);
+		}
+
+		CloseHandle(hShellProcess);
+		CloseHandle(hShellProcessToken);
+		CloseHandle(hPrimaryToken);
+		return false;
 	}
 	LOG_DEBUG("Set up workaround");
 

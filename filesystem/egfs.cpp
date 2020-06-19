@@ -68,6 +68,9 @@ bool EGFS::SetMountPoint(PCWSTR MountPoint, PVOID Security) {
     if (Started()) {
         return false;
     }
+    std::error_code ec; // in case the system crashed while WinFsp/EGL2 was running
+    fs::remove(MountPoint, ec);
+    fs::remove_all(MountPoint, ec);
     return NT_SUCCESS(FspFileSystemSetMountPointEx(FileSystem, (PWSTR)MountPoint, Security));
 }
 
