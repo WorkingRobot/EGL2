@@ -95,6 +95,15 @@ foreach(CompilerFlag ${CompilerFlags})
   string(REPLACE "/MD" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
 endforeach()
 
+if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC" AND CMAKE_BUILD_TYPE MATCHES "Release")
+   target_compile_options(EGL2 PRIVATE /Zi)
+    set_target_properties(EGL2 PROPERTIES
+        LINK_FLAGS "/INCREMENTAL:NO /DEBUG /OPT:REF /OPT:ICF"
+        COMPILE_PDB_NAME EGL2 
+        COMPILE_PDB_OUTPUT_DIR ${CMAKE_BINARY_DIR}
+    )
+endif()
+
 target_link_options(EGL2 PRIVATE "/DELAYLOAD:winfsp-x64.dll")
 target_include_directories(EGL2 PRIVATE "$ENV{ProgramFiles\(x86\)}\\WinFsp\\inc" ${Boost_LIBRARIES} ${RAPIDJSON_INCLUDE_DIRS} "libraries\\libdeflate" "libraries\\curlion")
 target_link_libraries(EGL2 PRIVATE "$ENV{ProgramFiles\(x86\)}\\WinFsp\\lib\\winfsp-x64.lib" ${wxWidgets_LIBRARIES} CURL::libcurl OpenSSL::Crypto Crypt32 libzstd lz4::lz4 delayimp "${CMAKE_CURRENT_SOURCE_DIR}\\libraries\\libdeflate\\libdeflatestatic.lib")
