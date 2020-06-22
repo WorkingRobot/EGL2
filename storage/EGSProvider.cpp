@@ -141,6 +141,7 @@ private:
 
 std::shared_ptr<char[]> EGSProvider::getChunk(std::shared_ptr<Chunk>& chunk)
 {
+	LOG_DEBUG("GETTING CHUNK PARTS");
 	std::vector<ChunkSection> parts;
 	for (auto& f : Build->FileManifestList) {
 		size_t offset = 0;
@@ -151,25 +152,31 @@ std::shared_ptr<char[]> EGSProvider::getChunk(std::shared_ptr<Chunk>& chunk)
 			offset += c.Size;
 		}
 	}
+	LOG_DEBUG("SORTING CHUNK PARTS");
 	std::sort(parts.begin(), parts.end(), [](ChunkSection& a, ChunkSection& b) {
 		return a.PartOffset() < b.PartOffset();
 	});
 
+	LOG_DEBUG("CREATING CHUNK PARTS");
 	auto ret = std::shared_ptr<char[]>(new char[chunk->WindowSize]);
 	auto amtRead = 0;
 	for (auto& part : parts) {
 		if (amtRead == part.PartOffset()) {
+			LOG_DEBUG("OPENING EGL FILE %s", part.FileName().c_str());
 			std::ifstream fp(InstallDir / part.FileName(), std::ios::in | std::ios::binary);
 			if (!fp.good()) {
 				LOG_ERROR("Couldn't open file (%s) to get %s", (InstallDir / part.FileName()).string().c_str(), chunk->GetGuid().c_str());
 				return nullptr;
 			}
+			LOG_DEBUG("SEEKING EGL FILE %llu", part.FileOffset());
 			fp.seekg(part.FileOffset(), std::ios::beg);
 			if (!fp.good()) {
 				LOG_ERROR("Couldn't seek in file (%s) to %zu to get %s", (InstallDir / part.FileName()).string().c_str(), part.FileOffset(), chunk->GetGuid().c_str());
 				return nullptr;
 			}
+			LOG_DEBUG("READING EGL FILE %d amt into buffer at %d", part.PartSize(), amtRead);
 			fp.read(ret.get() + amtRead, part.PartSize());
+			LOG_DEBUG("CLOSING CHUNK FILE");
 			fp.close();
 			Stats::FileReadCount.fetch_add(part.PartSize(), std::memory_order_relaxed);
 			amtRead += part.PartSize();
@@ -183,5 +190,6 @@ std::shared_ptr<char[]> EGSProvider::getChunk(std::shared_ptr<Chunk>& chunk)
 		LOG_ERROR("Chunk %s has invalid hash", chunk->GetGuid().c_str());
 		return nullptr;
 	}
+	LOG_DEBUG("RETURNING EGL DATA");
 	return ret;
 }

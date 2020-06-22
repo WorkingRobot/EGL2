@@ -202,6 +202,7 @@ Compressor::buffer_value Storage::DownloadChunk(std::shared_ptr<Chunk> Chunk, ca
     std::shared_ptr<char[]> data;
 
     if (!forceDownload && EGSProvider::Available() && EGSProvider::IsChunkAvailable(Chunk)) {
+        LOG_DEBUG("GETTING EGL DATA");
         data = EGSProvider::GetChunk(Chunk);
     }
     if (!data) { // EGSProvider GetChunk could return nullptr
@@ -333,7 +334,9 @@ bool Storage::ReadChunk(fs::path Path, Compressor::buffer_value& ReadBuffer, can
 
 void Storage::WriteChunk(fs::path Path, uint32_t DecompressedSize, Compressor::buffer_value& Buffer)
 {
+    LOG_DEBUG("OPENING CHUNK FILE");
     auto fp = fopen(Path.string().c_str(), "wb");
+    LOG_DEBUG("CREATING CHUNK HEADER");
     CHUNK_HEADER chunkHeader;
     chunkHeader.version = 0;
     switch (Flags & StorageCompMethodMask)
@@ -348,11 +351,15 @@ void Storage::WriteChunk(fs::path Path, uint32_t DecompressedSize, Compressor::b
         chunkHeader.flags = ChunkFlagLZ4;
         break;
     }
+    LOG_DEBUG("WRITING CHUNK HEADER");
     fwrite(&chunkHeader, sizeof(CHUNK_HEADER), 1, fp);
     if ((Flags & StorageCompMethodMask) != StorageDecompressed) { // Compressed chunks write the decompressed size
+        LOG_DEBUG("WRITING DECOMPRESSED SIZE");
         fwrite(&DecompressedSize, sizeof(uint32_t), 1, fp);
     }
+    LOG_DEBUG("WRITING CHUNK DATA");
     fwrite(Buffer.first.get(), 1, Buffer.second, fp);
+    LOG_DEBUG("CLOSING CHUNK FILE");
     fclose(fp);
 
     Stats::FileWriteCount.fetch_add(Buffer.second, std::memory_order_relaxed);

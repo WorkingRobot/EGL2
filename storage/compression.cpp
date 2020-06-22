@@ -74,13 +74,17 @@ Compressor::Compressor(uint32_t storageFlags) :
 		CCtx = std::make_unique<CtxManager<void*>>([]() { return _aligned_malloc(LZ4_sizeofStateHC(), 8); }, &_aligned_free);
 
 		CompressFunc = [this](std::shared_ptr<char[]>& buffer, size_t buffer_size) {
+			LOG_DEBUG("CREATING COMPRESSED BUF");
 			auto outBuf = std::shared_ptr<char[]>(new char[LZ4_COMPRESSBOUND(buffer_size)]);
 			size_t outSize;
 			{
 				std::unique_lock<std::mutex> lock;
+				LOG_DEBUG("GETTING LZ4 CCTX");
 				auto& cctx = CCtx->GetCtx(lock);
+				LOG_DEBUG("COMPRESSING LZ4 DATA");
 				outSize = LZ4_compress_HC_extStateHC(cctx, buffer.get(), outBuf.get(), buffer_size, LZ4_COMPRESSBOUND(buffer_size), CLevel);
 			}
+			LOG_DEBUG("RETURNING OUT DATA");
 			return std::make_pair(outBuf, outSize);
 		};
 		break;
