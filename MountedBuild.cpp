@@ -291,62 +291,64 @@ void MountedBuild::PreloadAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHa
     LOG_DEBUG("preloading");
     setMax(Build.ChunkManifestList.size());
 
-    auto purgeThread = std::thread([&, this]() {
+    auto purgeThread = std::thread([&, this] {
         PurgeUnusedChunks(flag);
     });
 
-    std::deque<std::thread> threads;
-    std::deque<std::atomic<bool>> threadCompletions;
+    auto setMaxThread = std::thread([&, this] {
+        setMax(GetMissingChunkCount());
+    });
 
-    {
-        auto& completion = threadCompletions.emplace_back(false);
-        threads.emplace_back([&, this]() {
-            setMax(GetMissingChunkCount());
-            completion = true;
-        });
-    }
+    auto threads = std::make_unique<std::thread[]>(threadCount);
 
-    std::mutex mx;
-    std::condition_variable cv;
-    Client::SetPoolSize(threadCount);
-    for (auto& chunk : Build.ChunkManifestList) {
-        if (StorageData.IsChunkDownloaded(chunk)) {
-            continue;
-        }
+    std::mutex iterMtx;
+    std::condition_variable iterCv;
 
-        // ensures that at < 128 threads are active here
-        if (std::count(threadCompletions.begin(), threadCompletions.end(), false) >= threadCount) {
-            std::unique_lock<std::mutex> lk(mx);
-            cv.wait(lk, [&] { return std::count(threadCompletions.begin(), threadCompletions.end(), false) < threadCount; });
-        }
-        int i = 0;
-        while (threadCompletions.front()) { // removes all the front values that have been completed
-            threads.front().join();
-            threads.pop_front();
-            threadCompletions.pop_front();
-            ++i;
-        }
-        if (i) {
-            LOG_DEBUG("Popped %d threads", i);
-        }
+    auto chunkIter = Build.ChunkManifestList.begin();
+    auto chunkEnd = Build.ChunkManifestList.end();
+    std::atomic_bool chunkDone = false;
 
-        if (flag.cancelled()) {
-            break;
+    auto GetChunk = [&] {
+        std::unique_lock<std::mutex> lk(iterMtx);
+        for (; chunkIter != chunkEnd; ++chunkIter) {
+            if (!StorageData.IsChunkDownloaded(*chunkIter)) {
+                return chunkIter++;
+            }
         }
-        
-        auto& completion = threadCompletions.emplace_back(false);
-        threads.emplace_back([&, this]() {
-            StorageData.DownloadChunk(chunk, flag);
+        chunkDone = true;
+        lk.unlock();
+        iterCv.notify_all();
+        return chunkEnd;
+    };
+
+    auto threadJob = [&] {
+        while (!chunkDone && !flag.cancelled()) {
+            auto chunk = GetChunk();
+            if (chunk == chunkEnd) {
+                return;
+            }
+            StorageData.DownloadChunk(*chunk, flag);
             onProg();
-            completion = true;
-            cv.notify_all();
-        });
+        }
+    };
+
+    Client::SetPoolSize(threadCount);
+
+    for (int i = 0; i < threadCount; ++i) {
+        threads[i] = std::thread(threadJob);
     }
+
+    std::unique_lock<std::mutex> lk(iterMtx);
+    iterCv.wait(lk, [&] { return chunkDone || flag.cancelled(); });
+
     Client::SetPoolSize(0);
-    for (auto& thread : threads) {
-        thread.join();
+
+    for (int i = 0; i < threadCount; ++i) {
+        threads[i].join();
     }
+
     purgeThread.join();
+    setMaxThread.join();
     onFinish();
     LOG_DEBUG("preloaded");
 }
