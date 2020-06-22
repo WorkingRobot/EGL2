@@ -21,6 +21,11 @@ cApp::cApp() {
 
 }
 
+inline uint32_t GetThreadId() {
+	auto id = std::this_thread::get_id();
+	return *(uint32_t*)&id;
+}
+
 cApp::~cApp() {
 	if (InstanceChecker) {
 		delete InstanceChecker;
@@ -42,11 +47,12 @@ bool cApp::OnInit() {
 	return true;
 }
 
+std::ostringstream preLogStream;
+
 bool cApp::InitThread() {
 	Logger::Setup();
-	std::ostringstream preLogStream;
-	Logger::Callback = [&preLogStream](Logger::LogLevel level, const char* section, const char* str) {
-		auto logString = wxString::Format("%s - %s: %s\n", Logger::LevelAsString(level), section, str);
+	Logger::Callback = [](Logger::LogLevel level, const char* section, const char* str) {
+		auto logString = wxString::Format("%s - %d %s: %s\n", Logger::LevelAsString(level), GetThreadId(), section, str);
 		preLogStream.write(logString.c_str(), logString.size());
 	};
 
@@ -112,7 +118,7 @@ bool cApp::InitThread() {
 	}
 	else {
 		Logger::Callback = [this](Logger::LogLevel level, const char* section, const char* str) {
-			fprintf(LogFile, "%s - %s: %s\n", Logger::LevelAsString(level), section, str);
+			fprintf(LogFile, "%s - %d %s: %s\n", Logger::LevelAsString(level), GetThreadId(), section, str);
 			fflush(LogFile);
 		};
 		auto preLogData = preLogStream.str();

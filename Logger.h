@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <memory>
+#include <thread>
 
 class Logger {
 public:
@@ -20,14 +21,19 @@ public:
 		FATAL
 	};
 
-	static bool Setup(); 
+	static bool Setup();
+
+	inline static uint32_t GetThreadId() {
+		auto id = std::this_thread::get_id();
+		return *(uint32_t*)&id;
+	}
 
 	template<typename... Args>
 	static void Log(LogLevel level, const char* section, const char* str, Args... args) {
 		auto size = snprintf(nullptr, 0, str, args...) + 1;
 		auto buf = std::make_unique<char[]>(size);
 		snprintf(buf.get(), size, str, args...);
-		printf("%s%s - %s: %s\n%s", Logger::LevelAsColor(level), Logger::LevelAsString(level), section, buf.get(), Logger::ResetColor);
+		printf("%s%s - %d %s: %s\n%s", Logger::LevelAsColor(level), Logger::LevelAsString(level), GetThreadId(), section, buf.get(), Logger::ResetColor);
 		if (Callback) {
 			Callback(level, section, buf.get());
 		}
