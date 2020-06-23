@@ -6,6 +6,12 @@
 #define LOG_ERROR(str, ...) Logger::Log(Logger::LogLevel::ERROR_, LOG_SECTION, str, __VA_ARGS__)
 #define LOG_FATAL(str, ...) Logger::Log(Logger::LogLevel::FATAL,  LOG_SECTION, str, __VA_ARGS__)
 
+#define LOG_VA_DEBUG(str, va) Logger::Log(Logger::LogLevel::DEBUG,  LOG_SECTION, str, va)
+#define LOG_VA_INFO(str, va)  Logger::Log(Logger::LogLevel::INFO,   LOG_SECTION, str, va)
+#define LOG_VA_WARN(str, va)  Logger::Log(Logger::LogLevel::WARN,   LOG_SECTION, str, va)
+#define LOG_VA_ERROR(str, va) Logger::Log(Logger::LogLevel::ERROR_, LOG_SECTION, str, va)
+#define LOG_VA_FATAL(str, va) Logger::Log(Logger::LogLevel::FATAL,  LOG_SECTION, str, va)
+
 #include <functional>
 #include <memory>
 #include <thread>
@@ -33,6 +39,16 @@ public:
 		auto size = snprintf(nullptr, 0, str, args...) + 1;
 		auto buf = std::make_unique<char[]>(size);
 		snprintf(buf.get(), size, str, args...);
+		printf("%s%s - %d %s: %s\n%s", Logger::LevelAsColor(level), Logger::LevelAsString(level), GetThreadId(), section, buf.get(), Logger::ResetColor);
+		if (Callback) {
+			Callback(level, section, buf.get());
+		}
+	}
+
+	static void Log(LogLevel level, const char* section, const char* str, va_list args) {
+		auto size = vsnprintf(nullptr, 0, str, args) + 1;
+		auto buf = std::make_unique<char[]>(size);
+		vsnprintf(buf.get(), size, str, args);
 		printf("%s%s - %d %s: %s\n%s", Logger::LevelAsColor(level), Logger::LevelAsString(level), GetThreadId(), section, buf.get(), Logger::ResetColor);
 		if (Callback) {
 			Callback(level, section, buf.get());

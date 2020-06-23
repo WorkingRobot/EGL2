@@ -4,6 +4,7 @@
 #define LOG_SECTION "cApp"
 #endif
 
+#include "../checks/oodle_handler.h"
 #include "../checks/symlink_workaround.h"
 #include "../checks/winfspcheck.h"
 #include "../Logger.h"
@@ -11,6 +12,7 @@
 #include "cSplash.h"
 #include "Localization.h"
 
+#include <oodle2.h>
 #include <ShlObj_core.h>
 #include <sstream>
 #include <wx/notifmsg.h>
@@ -128,27 +130,84 @@ bool cApp::InitThread() {
 	LOG_DEBUG("Created file logger");
 
 	LOG_INFO("Loading WinFsp");
-	auto result = LoadWinFsp();
-	if (result != WinFspCheckResult::LOADED) {
-		LOG_FATAL("WinFsp failed with %d", result);
-		switch (result)
-		{
-		case WinFspCheckResult::NO_PATH:
-			MESSAGE_ERROR(APP_ERROR_PROGFILES86);
-			break;
-		case WinFspCheckResult::NO_DLL:
-			MESSAGE_ERROR(APP_ERROR_WINFSP_FIND);
-			break;
-		case WinFspCheckResult::CANNOT_LOAD:
-			MESSAGE_ERROR(APP_ERROR_WINFSP_LOAD);
-			break;
-		default:
-			MESSAGE_ERROR(APP_ERROR_WINFSP_UNKNOWN, result);
-			break;
+	{
+		auto result = LoadWinFsp();
+		if (result != WinFspCheckResult::LOADED) {
+			LOG_FATAL("WinFsp failed with %d", result);
+			switch (result)
+			{
+			case WinFspCheckResult::NO_PATH:
+				MESSAGE_ERROR(APP_ERROR_PROGFILES86);
+				break;
+			case WinFspCheckResult::NO_DLL:
+				MESSAGE_ERROR(APP_ERROR_WINFSP_FIND);
+				break;
+			case WinFspCheckResult::CANNOT_LOAD:
+				MESSAGE_ERROR(APP_ERROR_WINFSP_LOAD);
+				break;
+			default:
+				MESSAGE_ERROR(APP_ERROR_WINFSP_UNKNOWN, result);
+				break;
+			}
+			return false;
 		}
-		return false;
 	}
 	LOG_DEBUG("Loaded WinFsp");
+
+	LOG_INFO("Loading Oodle");
+	{
+		auto result = LoadOodle(DataFolder);
+		if (result != OodleHandlerResult::LOADED) {
+			LOG_FATAL("Oodle failed with %d", result);
+			switch (result)
+			{
+			case OodleHandlerResult::NET_ERROR:
+				MESSAGE_ERROR(APP_ERROR_NETWORK);
+				break;
+			case OodleHandlerResult::LZMA_ERROR:
+				MESSAGE_ERROR(APP_ERROR_OODLE_LZMA);
+				break;
+			case OodleHandlerResult::INDEX_ERROR:
+				MESSAGE_ERROR(APP_ERROR_OODLE_INDEX);
+				break;
+			case OodleHandlerResult::CANNOT_LOAD:
+				MESSAGE_ERROR(APP_ERROR_OODLE_LOAD);
+				break;
+			case OodleHandlerResult::CANNOT_WRITE:
+				MESSAGE_ERROR(APP_ERROR_OODLE_WRITE);
+				break;
+			default:
+				MESSAGE_ERROR(APP_ERROR_OODLE_UNKNOWN, result);
+				break;
+			}
+			return false;
+		}
+
+		LOG_DEBUG("Checking Oodle compatability");
+		U32 dllVer;
+		if (!Oodle_CheckVersion(OodleSDKVersion, &dllVer)) {
+			LOG_FATAL("Oodle is incompatible! SDK: %08X, DLL: %08X", OodleSDKVersion, dllVer);
+			MESSAGE_ERROR(APP_ERROR_OODLE_INCOMPAT, OodleSDKVersion, dllVer);
+			return false;
+		}
+		LOG_DEBUG("Oodle versions: SDK: %08X, DLL: %08X", OodleSDKVersion, dllVer);
+
+		OodleCore_Plugins_SetPrintf([](bool debug, const char* filename, uint32_t line_num, const char* format, ...) {
+			std::string frmt(format, strlen(format) - 1); // removes newline (and doesn't overwrite dll data)
+			va_list args;
+			va_start(args, format);
+			if (debug) {
+				LOG_VA_DEBUG(frmt.c_str(), args);
+			}
+			else {
+				LOG_VA_ERROR(frmt.c_str(), args);
+			}
+			va_end(args);
+		});
+
+		Oodle_LogHeader();
+	}
+	LOG_DEBUG("Loaded Oodle");
 
 	LOG_INFO("Setting up symlink workaround");
 	if (!IsDeveloperModeEnabled()) {

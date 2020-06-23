@@ -65,6 +65,7 @@ find_package(RapidJSON CONFIG REQUIRED)
 find_package(lz4 REQUIRED)
 find_package(zstd CONFIG REQUIRED)
 find_package(CURL CONFIG REQUIRED)
+find_package(LibLZMA CONFIG REQUIRED)
 find_package(BOOST 1.68.0 REQUIRED COMPONENTS asio)
 find_package(wxWidgets REQUIRED COMPONENTS core base png zlib)
 include(${wxWidgets_USE_FILE})
@@ -104,8 +105,25 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC" AND CMAKE_BUILD_TYPE MATCHES "Release")
     )
 endif()
 
-target_link_options(EGL2 PRIVATE "/DELAYLOAD:winfsp-x64.dll")
-target_include_directories(EGL2 PRIVATE "$ENV{ProgramFiles\(x86\)}\\WinFsp\\inc" ${Boost_LIBRARIES} ${RAPIDJSON_INCLUDE_DIRS} "libraries\\libdeflate" "libraries\\curlion")
-target_link_libraries(EGL2 PRIVATE "$ENV{ProgramFiles\(x86\)}\\WinFsp\\lib\\winfsp-x64.lib" ${wxWidgets_LIBRARIES} CURL::libcurl OpenSSL::Crypto Crypt32 libzstd lz4::lz4 delayimp "${CMAKE_CURRENT_SOURCE_DIR}\\libraries\\libdeflate\\libdeflatestatic.lib")
+target_link_options(EGL2 PRIVATE "/DELAYLOAD:winfsp-x64.dll" "/DELAYLOAD:oo2core_8_win64.dll")
+target_include_directories(EGL2 PRIVATE
+    "$ENV{ProgramFiles\(x86\)}\\WinFsp\\inc"
+    ${Boost_LIBRARIES}
+    ${RAPIDJSON_INCLUDE_DIRS}
+    "libraries\\libdeflate"
+    "libraries\\curlion"
+    "libraries\\oodle")
+target_link_libraries(EGL2 PRIVATE
+    "$ENV{ProgramFiles\(x86\)}\\WinFsp\\lib\\winfsp-x64.lib"
+    ${wxWidgets_LIBRARIES}
+    CURL::libcurl
+    OpenSSL::Crypto
+    Crypt32
+    libzstd
+    lz4::lz4
+    LibLZMA::LibLZMA
+    delayimp
+    "${CMAKE_CURRENT_SOURCE_DIR}\\libraries\\libdeflate\\libdeflatestatic.lib"
+    "${CMAKE_CURRENT_SOURCE_DIR}\\libraries\\oodle\\oo2core_8_win64.lib")
 
 target_link_libraries(LocaleTool PRIVATE libzstd)
