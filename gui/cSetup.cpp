@@ -7,32 +7,6 @@
 #include <wx/gbsizer.h>
 #include <wx/slider.h>
 
-static const char* compMethods[] = {
-	"Zstandard (Not tested)",
-	"LZ4 (Recommended)",
-	"Decompressed"
-};
-
-static const char* compLevels[] = {
-	"Fastest",
-	"Fast",
-	"Normal",
-	"Slow",
-	"Slowest"
-};
-
-static const char* updateLevels[] = {
-	"1 second",
-	"5 seconds",
-	"10 seconds",
-	"30 seconds",
-	"1 minute",
-	"5 minutes",
-	"10 minutes",
-	"30 minutes",
-	"1 hour",
-};
-
 #define DEFINE_SECTION(name, displayName) \
 	auto sectionBox##name = new wxStaticBoxSizer(wxVERTICAL, panel, displayName); \
 	auto sectionGrid##name = new wxGridBagSizer(2, 2); \
@@ -136,14 +110,14 @@ cSetup::cSetup(wxWindow* main, SETTINGS* settings, bool startupInvalid, cSetup::
 		wxTAB_TRAVERSAL);
 
 	auto mainSizer = new wxBoxSizer(wxVERTICAL);
-
 	DEFINE_SECTION(general, LSTR(SETUP_GENERAL_LABEL));
 	ADD_ITEM_BROWSE(general, cacheDir, LSTR(SETUP_GENERAL_INSTFOLDER), CacheDir);
 	ADD_ITEM_CHOICE(general, compMethod, LSTR(SETUP_GENERAL_COMPMETHOD),
 		GetChoices(
+			LSTR(SETUP_COMP_METHOD_DECOMP),
 			LSTR(SETUP_COMP_METHOD_ZSTD),
 			LSTR(SETUP_COMP_METHOD_LZ4),
-			LSTR(SETUP_COMP_METHOD_DECOMP)
+			LSTR(SETUP_COMP_METHOD_SELKIE)
 		),
 		SettingsCompressionMethod, CompressionMethod);
 	ADD_ITEM_TEXTSLIDER(general, compLevel, LSTR(SETUP_GENERAL_COMPLEVEL),

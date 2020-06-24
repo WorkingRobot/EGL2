@@ -79,7 +79,22 @@ inline bool ReadVersion(SETTINGS* Settings, FILE* File, SettingsVersion Version)
 	case SettingsVersion::Version13:
 		ReadString(Settings->CacheDir, File);
 
-		Settings->CompressionMethod = ReadValue<SettingsCompressionMethod>(File);
+		switch (ReadValue<int8_t>(File))
+		{
+		case 0: // zstd
+			Settings->CompressionMethod = SettingsCompressionMethod::Zstandard;
+			break;
+		case 1: // lz4
+			Settings->CompressionMethod = SettingsCompressionMethod::LZ4;
+			break;
+		case 2: // decompressed
+			Settings->CompressionMethod = SettingsCompressionMethod::Decompressed;
+			break;
+		default:
+			Settings->CompressionMethod = SettingsCompressionMethod::Decompressed;
+			break;	
+		}
+
 		Settings->CompressionLevel = ReadValue<SettingsCompressionLevel>(File);
 		Settings->UpdateInterval = ReadValue<SettingsUpdateInterval>(File);
 
@@ -88,6 +103,17 @@ inline bool ReadVersion(SETTINGS* Settings, FILE* File, SettingsVersion Version)
 
 		ReadString(Settings->CommandArgs, File);
 		return true;
+	case SettingsVersion::Oodle:
+		ReadString(Settings->CacheDir, File);
+
+		Settings->CompressionMethod = ReadValue<SettingsCompressionMethod>(File);
+		Settings->CompressionLevel = ReadValue<SettingsCompressionLevel>(File);
+		Settings->UpdateInterval = ReadValue<SettingsUpdateInterval>(File);
+
+		Settings->BufferCount = ReadValue<uint16_t>(File);
+		Settings->ThreadCount = ReadValue<uint16_t>(File);
+
+		ReadString(Settings->CommandArgs, File);
 	default:
 		return false;
 	}
@@ -136,12 +162,12 @@ void SettingsWrite(SETTINGS* Settings, FILE* File)
 SETTINGS SettingsDefault() {
 	return {
 		.CacheDir = "",
-		.CompressionMethod = SettingsCompressionMethod::LZ4,
-		.CompressionLevel = SettingsCompressionLevel::Slow,
+		.CompressionMethod = SettingsCompressionMethod::OodleSelkie,
+		.CompressionLevel = SettingsCompressionLevel::Normal,
 		.UpdateInterval = SettingsUpdateInterval::Minute1,
 		.BufferCount = 128,
 		.ThreadCount = 64,
-		.CommandArgs = "-NOTEXTURESTREAMING -USEALLAVAILABLECORES"
+		.CommandArgs = ""
 	};
 }
 
@@ -181,15 +207,18 @@ uint32_t SettingsGetStorageFlags(SETTINGS* Settings) {
     uint32_t StorageFlags = StorageVerifyHashes;
     switch (Settings->CompressionMethod)
     {
+	case SettingsCompressionMethod::Decompressed:
+		StorageFlags |= StorageDecompressed;
+		break;
+	case SettingsCompressionMethod::Zstandard:
+		StorageFlags |= StorageZstd;
+		break;
 	case SettingsCompressionMethod::LZ4:
         StorageFlags |= StorageLZ4;
         break;
-	case SettingsCompressionMethod::Zstandard:
-        StorageFlags |= StorageZstd;
-        break;
-	case SettingsCompressionMethod::Decompressed:
-        StorageFlags |= StorageDecompressed;
-        break;
+	case SettingsCompressionMethod::OodleSelkie:
+		StorageFlags |= StorageSelkie;
+		break;
     }
     switch (Settings->CompressionLevel)
     {

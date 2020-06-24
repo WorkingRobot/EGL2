@@ -17,14 +17,17 @@ enum class SettingsVersion : uint16_t {
 	// Removes VerifyCache and EnableGaming
 	Version13,
 
+	Oodle,
+
 	LatestPlusOne,
 	Latest = LatestPlusOne - 1
 };
 
 enum class SettingsCompressionMethod : uint8_t {
+	Decompressed,
 	Zstandard,
 	LZ4,
-	Decompressed
+	OodleSelkie
 };
 
 enum class SettingsCompressionLevel : uint8_t {

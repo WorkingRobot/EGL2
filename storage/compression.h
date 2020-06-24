@@ -61,14 +61,18 @@ public:
 	buffer_value ZlibDecompress(FILE* File, size_t& inBufSize);
 	buffer_value ZstdDecompress(FILE* File, size_t& inBufSize);
 	buffer_value LZ4Decompress(FILE* File, size_t& inBufSize);
+	buffer_value OodleDecompress(FILE* File, size_t& inBufSize);
 
 private:
 	std::function<buffer_value(std::shared_ptr<char[]>, size_t)> CompressFunc;
 
 	int CLevel;
+
 	std::unique_ptr<CtxManager<void*>> CCtx;
+
 	std::unique_ptr<CtxManager<libdeflate_decompressor*>> ZlibDCtx;
 	std::unique_ptr<CtxManager<ZSTD_DCtx*>> ZstdDCtx;
-	//std::unique_ptr<CtxManager<void*>> LZ4DCtx; lz4 decompression doesn't use a ctx
+	// lz4 nor oodle decompression use a DCtx
+
 	uint32_t StorageFlags;
 };

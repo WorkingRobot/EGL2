@@ -168,6 +168,7 @@ enum {
     ChunkFlagZstd = 0x02,
     ChunkFlagZlib = 0x04,
     ChunkFlagLZ4 = 0x08,
+    ChunkFlagOodle = 0x09,
     ChunkFlagCompMask = 0xF
 };
 #pragma pack(push, 1)
@@ -323,6 +324,14 @@ bool Storage::ReadChunk(fs::path Path, Compressor::buffer_value& ReadBuffer, can
         Stats::FileReadCount.fetch_add(inBufSize, std::memory_order_relaxed);
         return true;
     }
+    case ChunkFlagOodle:
+    {
+        size_t inBufSize;
+        ReadBuffer = Compressor.OodleDecompress(fp, inBufSize);
+        fclose(fp);
+        Stats::FileReadCount.fetch_add(inBufSize, std::memory_order_relaxed);
+        return true;
+    }
     default:
     {
         fclose(fp);
@@ -349,6 +358,9 @@ void Storage::WriteChunk(fs::path Path, uint32_t DecompressedSize, Compressor::b
         break;
     case StorageLZ4:
         chunkHeader.flags = ChunkFlagLZ4;
+        break;
+    case StorageSelkie:
+        chunkHeader.flags = ChunkFlagOodle;
         break;
     }
     LOG_DEBUG("WRITING CHUNK HEADER");

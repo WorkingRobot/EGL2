@@ -11,7 +11,14 @@
     LS(APP_ERROR_PROGFILES86)          /* Error to show if the Program Files (x86) folder wasn't found                          */ \
     LS(APP_ERROR_WINFSP_FIND)          /* Error to show if WinFsp wasn't found                                                  */ \
     LS(APP_ERROR_WINFSP_LOAD)          /* Error to show if WinFsp's dll couldn't be loaded                                      */ \
-    LS(APP_ERROR_WINFSP_UNKNOWN)       /* Error to show if an unknown error occurred                                            */ \
+    LS(APP_ERROR_WINFSP_UNKNOWN)       /* Error to show if an unknown error occurred when loading WinFsp                        */ \
+    LS(APP_ERROR_NETWORK)              /* Error to show if EGL2 can't connect to the internet                                   */ \
+    LS(APP_ERROR_OODLE_LZMA)           /* Error to show if LZMA failed                                                          */ \
+    LS(APP_ERROR_OODLE_INDEX)          /* Error to show if EGL2 couldn't grab the index                                         */ \
+    LS(APP_ERROR_OODLE_LOAD)           /* Error to show if Oodle's dll couldn't be loaded                                       */ \
+    LS(APP_ERROR_OODLE_WRITE)          /* Error to show if Oodle's dll couldn't be written                                      */ \
+    LS(APP_ERROR_OODLE_UNKNOWN)        /* Error to show if an unknown error occurred when loading Oodle                         */ \
+    LS(APP_ERROR_OODLE_INCOMPAT)       /* Error to show if Oodle's dll is incompatible with EGL2                                */ \
     LS(MAIN_BTN_SETTINGS)              /* Settings button name                                                                  */ \
     LS(MAIN_BTN_VERIFY)                /* Verify button name                                                                    */ \
     LS(MAIN_BTN_PLAY)                  /* Play button name                                                                      */ \
@@ -45,9 +52,10 @@
     LS(PROG_BTN_CANCEL)                /* Cancel button                                                                         */ \
     LS(PROG_BTN_CANCELLING)            /* Cancel button text when already clicked and cancelling                                */ \
     LS(SETUP_TITLE)                    /* Title of setup/settings window                                                        */ \
+    LS(SETUP_COMP_METHOD_DECOMP)       /* Decompression compression method (no compression)                                     */ \
     LS(SETUP_COMP_METHOD_ZSTD)         /* zstd compression method                                                               */ \
     LS(SETUP_COMP_METHOD_LZ4)          /* lz4 compression method                                                                */ \
-    LS(SETUP_COMP_METHOD_DECOMP)       /* Decompression compression method (no compression)                                     */ \
+    LS(SETUP_COMP_METHOD_SELKIE)       /* Oodle's Selkie compression method                                                     */ \
     LS(SETUP_COMP_LEVEL_FASTEST)       /* Fastest compression speed                                                             */ \
     LS(SETUP_COMP_LEVEL_FAST)          /* Fast compression speed                                                                */ \
     LS(SETUP_COMP_LEVEL_NORMAL)        /* Normal compression speed                                                              */ \

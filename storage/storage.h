@@ -15,17 +15,18 @@ namespace fs = std::filesystem;
 
 enum
 {
-    StorageDecompressed         = 0x00000001, // Chunks decompressed to solid blocks
+    StorageDecompressed         = 0x00000001, // Chunks saved as raw blocks
     StorageZstd                 = 0x00000002, // Chunks are recompressed with Zlib
     StorageLZ4                  = 0x00000003, // Chunks are recompressed with LZ4
-    StorageCompMethodMask       = 0x0000000F, // Chunks are recompressed with LZ4
+    StorageSelkie               = 0x00000004, // Chunks are recompressed with Oodle Selkie
+    StorageCompMethodMask       = 0x0000000F, // Compresssion method mask
 
-    StorageCompressFastest      = 0x00000010, // Zlib = 1
-    StorageCompressFast         = 0x00000020, // Zlib = 4
-    StorageCompressNormal       = 0x00000030, // Zlib = 6
-    StorageCompressSlow         = 0x00000040, // Zlib = 9
-    StorageCompressSlowest      = 0x00000050, // Zlib = 12
-    StorageCompLevelMask        = 0x000000F0, // Chunks are recompressed with LZ4
+    StorageCompressFastest      = 0x00000010,
+    StorageCompressFast         = 0x00000020,
+    StorageCompressNormal       = 0x00000030,
+    StorageCompressSlow         = 0x00000040,
+    StorageCompressSlowest      = 0x00000050,
+    StorageCompLevelMask        = 0x000000F0, // Compression level mask
 
     StorageVerifyHashes         = 0x00001000, // Verify SHA hashes of downloaded chunks when reading and redownload if invalid
 };
