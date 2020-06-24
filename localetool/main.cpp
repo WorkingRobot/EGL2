@@ -54,6 +54,7 @@ inline void WriteLocale(std::ostringstream& ostr, FILE* localePtr) {
 	for (int i = 0; i < (int)LocaleString::Count; ++i) {
 		if (!d.HasMember(jsonKeys[i])) {
 			printf("DOES NOT HAVE %s\n", jsonKeys[i]);
+			exit(0);
 		}
 		auto& v = d[jsonKeys[i]];
 		auto val = strconv(v.GetString());
