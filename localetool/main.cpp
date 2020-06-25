@@ -41,23 +41,41 @@ inline void WriteString(std::ostringstream& ostr, const wchar_t* data, uint16_t 
 static constexpr const char* jsonKeys[] = { LOCALESTRINGS };
 #undef LS
 
-inline void WriteLocale(std::ostringstream& ostr, FILE* localePtr) {
+rapidjson::Document fallbackLocale;
+inline void SetFallbackLocale(const char* infile) {
+	auto localePtr = fopen(infile, "rb");
+
+	char readBuffer[8192];
+	rapidjson::FileReadStream is(localePtr, readBuffer, sizeof(readBuffer));
+	fallbackLocale.ParseStream(is);
+
+	fclose(localePtr);
+
+	if (fallbackLocale.HasParseError()) {
+		printf("COULD NOT PARSE FALLBACK: JSON Parse Error %d @ %zu\n", fallbackLocale.GetParseError(), fallbackLocale.GetErrorOffset());
+	}
+}
+
+inline void WriteLocale(std::ostringstream& ostr, FILE* localePtr, const char* lang) {
 	char readBuffer[8192];
 	rapidjson::FileReadStream is(localePtr, readBuffer, sizeof(readBuffer));
 	rapidjson::Document d;
 	d.ParseStream(is);
 	if (d.HasParseError()) {
-		printf("COULD NOT PARSE: JSON Parse Error %d @ %zu", d.GetParseError(), d.GetErrorOffset());
+		printf("COULD NOT PARSE %s: JSON Parse Error %d @ %zu\n", lang, d.GetParseError(), d.GetErrorOffset());
 		return;
 	}
 
 	for (int i = 0; i < (int)LocaleString::Count; ++i) {
+		const char* v;
 		if (!d.HasMember(jsonKeys[i])) {
-			printf("DOES NOT HAVE %s\n", jsonKeys[i]);
-			exit(0);
+			printf("%s DOES NOT HAVE %s\n", lang, jsonKeys[i]);
+			v = fallbackLocale[jsonKeys[i]].GetString();
 		}
-		auto& v = d[jsonKeys[i]];
-		auto val = strconv(v.GetString());
+		else {
+			v = d[jsonKeys[i]].GetString();
+		}
+		auto val = strconv(v);
 		WriteString(ostr, val.c_str(), val.size());
 	}
 }
@@ -69,7 +87,7 @@ inline void WriteLocale(const char* infile, const char* outfile, const char* lan
 		auto inpF = fopen(infile, "rb");
 		if (inpF) {
 			printf("Parsing %s\n", lang);
-			WriteLocale(ostr, inpF);
+			WriteLocale(ostr, inpF, lang);
 			fclose(inpF);
 		}
 		else {
@@ -88,6 +106,8 @@ inline void WriteLocale(const char* infile, const char* outfile, const char* lan
 }
 
 int main(int argc, char* argv[]) {
+	SetFallbackLocale(LOCTEXT_FOLDER "EN" ".json");
+
 #define LS(name) WriteLocale(LOCTEXT_FOLDER #name ".json", LOCDATA_FOLDER #name ".loc", #name);
 		LOCALETYPES
 #undef LS
