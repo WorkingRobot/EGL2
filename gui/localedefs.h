@@ -74,13 +74,20 @@
     LS(SETUP_GENERAL_INSTFOLDER)       /* Install folder                                                                        */ \
     LS(SETUP_GENERAL_COMPMETHOD)       /* Compression method                                                                    */ \
     LS(SETUP_GENERAL_COMPLEVEL)        /* Compression level                                                                     */ \
-    LS(SETUP_GENERAL_UPDATEINT)        /* Update Interval (how often EGL2 checks for updates)                                   */ \
+    LS(SETUP_GENERAL_UPDATEINT)        /* Update interval (how often EGL2 checks for Fortnite updates)                          */ \
     LS(SETUP_ADVANCED_LABEL)           /* Advanced settings section title                                                       */ \
     LS(SETUP_ADVANCED_BUFCT)           /* Number of chunks/buffers to keep in memory before reading from disk again             */ \
     LS(SETUP_ADVANCED_THDCT)           /* Number of threads to use when verifying or updating                                   */ \
     LS(SETUP_ADVANCED_CMDARGS)         /* Command arguments to launch with Fortnite                                             */ \
     LS(SETUP_BTN_OK)                   /* OK button in setup                                                                    */ \
-    LS(SETUP_BTN_CANCEL)               /* Cancel button in setup                                                                */
+    LS(SETUP_BTN_CANCEL)               /* Cancel button in setup                                                                */ \
+    LS(SETUP_GENERAL_INSTFOLDER_HELP)  /* Install folder help message                                                           */ \
+    LS(SETUP_GENERAL_COMPMETHOD_HELP)  /* Compression method help message                                                       */ \
+    LS(SETUP_GENERAL_COMPLEVEL_HELP)   /* Compression level help message                                                        */ \
+    LS(SETUP_GENERAL_UPDATEINT_HELP)   /* Update interval help message                                                          */ \
+    LS(SETUP_ADVANCED_BUFCT_HELP)      /* Buffer count help message                                                             */ \
+    LS(SETUP_ADVANCED_THDCT_HELP)      /* Thread count help message                                                             */ \
+    LS(SETUP_ADVANCED_CMDARGS_HELP)    /* Command args help message                                                             */ \
 
 #define LOCALETYPES \
     LS(AR)      /* Arabic               */ \

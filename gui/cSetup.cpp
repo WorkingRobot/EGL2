@@ -1,6 +1,7 @@
 #include "cSetup.h"
 
 #include "Localization.h"
+#include "wxHelpButton.h"
 #include "wxLabelSlider.h"
 
 #include <wx/filepicker.h>
@@ -14,7 +15,7 @@
 	sectionGrid##name->Add(5, 1, wxGBPosition(0, 1)); \
 	sectionBox##name->Add(sectionGrid##name, wxSizerFlags().Expand().Border(wxALL, 5));
 
-#define ADD_ITEM_BROWSE(section, name, displayName, binder) \
+#define ADD_ITEM_BROWSE(section, name, displayName, helpData, binder) \
 	auto sectionLabel##name = new wxStaticText(panel, wxID_ANY, displayName); \
 	auto sectionValue##name = new wxDirPickerCtrl(panel, wxID_ANY); \
 	ReadBinds.emplace_back([sectionValue##name](SETTINGS* val) { \
@@ -25,9 +26,10 @@
 	}); \
 	sectionGrid##section->Add(sectionLabel##name, wxGBPosition(sectionColInd##section, 0), wxGBSpan(1, 1), wxEXPAND); \
 	sectionGrid##section->Add(sectionValue##name, wxGBPosition(sectionColInd##section, 2), wxGBSpan(1, 1), wxEXPAND); \
+	sectionGrid##section->Add(new wxHelpButton(panel, wxID_ANY, helpData), wxGBPosition(sectionColInd##section, 3), wxGBSpan(1, 1), wxEXPAND); \
 	sectionColInd##section++;
 
-#define ADD_ITEM_CHOICE(section, name, displayName, choices, under_type, binder) \
+#define ADD_ITEM_CHOICE(section, name, displayName, helpData, choices, under_type, binder) \
 	auto sectionLabel##name = new wxStaticText(panel, wxID_ANY, displayName); \
 	auto sectionValue##name = new wxChoice(panel, wxID_ANY); \
 	ReadBinds.emplace_back([sectionValue##name](SETTINGS* val) { \
@@ -39,9 +41,10 @@
 	sectionValue##name->Append(choices); \
 	sectionGrid##section->Add(sectionLabel##name, wxGBPosition(sectionColInd##section, 0), wxGBSpan(1, 1), wxEXPAND); \
 	sectionGrid##section->Add(sectionValue##name, wxGBPosition(sectionColInd##section, 2), wxGBSpan(1, 1), wxEXPAND); \
+	sectionGrid##section->Add(new wxHelpButton(panel, wxID_ANY, helpData), wxGBPosition(sectionColInd##section, 3), wxGBSpan(1, 1), wxEXPAND); \
 	sectionColInd##section++;
 
-#define ADD_ITEM_TEXTSLIDER(section, name, displayName, choices, under_type, binder) \
+#define ADD_ITEM_TEXTSLIDER(section, name, displayName, helpData, choices, under_type, binder) \
 	auto sectionLabel##name = new wxStaticText(panel, wxID_ANY, displayName); \
 	auto sectionValue##name = new wxLabelSlider(panel, wxID_ANY, 0, choices, wxSL_HORIZONTAL | wxSL_AUTOTICKS); \
 	ReadBinds.emplace_back([sectionValue##name](SETTINGS* val) { \
@@ -52,9 +55,10 @@
 	}); \
 	sectionGrid##section->Add(sectionLabel##name, wxGBPosition(sectionColInd##section, 0), wxGBSpan(1, 1), wxEXPAND); \
 	sectionGrid##section->Add(sectionValue##name, wxGBPosition(sectionColInd##section, 2), wxGBSpan(1, 1), wxEXPAND); \
+	sectionGrid##section->Add(new wxHelpButton(panel, wxID_ANY, helpData), wxGBPosition(sectionColInd##section, 3), wxGBSpan(1, 1), wxEXPAND); \
 	sectionColInd##section++;
 
-#define ADD_ITEM_SLIDER(section, name, displayName, minValue, maxValue, under_type, binder) \
+#define ADD_ITEM_SLIDER(section, name, displayName, helpData, minValue, maxValue, under_type, binder) \
 	auto sectionLabel##name = new wxStaticText(panel, wxID_ANY, displayName); \
 	auto sectionValue##name = new wxSlider(panel, wxID_ANY, minValue, minValue, maxValue, wxDefaultPosition, wxDefaultSize, wxSL_HORIZONTAL | wxSL_LABELS); \
 	ReadBinds.emplace_back([sectionValue##name](SETTINGS* val) { \
@@ -65,9 +69,10 @@
 	}); \
 	sectionGrid##section->Add(sectionLabel##name, wxGBPosition(sectionColInd##section, 0), wxGBSpan(1, 1), wxEXPAND); \
 	sectionGrid##section->Add(sectionValue##name, wxGBPosition(sectionColInd##section, 2), wxGBSpan(1, 1), wxEXPAND); \
+	sectionGrid##section->Add(new wxHelpButton(panel, wxID_ANY, helpData), wxGBPosition(sectionColInd##section, 3), wxGBSpan(1, 1), wxEXPAND); \
 	sectionColInd##section++;
 
-#define ADD_ITEM_TEXT(section, name, displayName, binder) \
+#define ADD_ITEM_TEXT(section, name, displayName, helpData, binder) \
 	auto sectionLabel##name = new wxStaticText(panel, wxID_ANY, displayName); \
 	auto sectionValue##name = new wxTextCtrl(panel, wxID_ANY); \
 	ReadBinds.emplace_back([sectionValue##name](SETTINGS* val) { \
@@ -78,6 +83,7 @@
 	}); \
 	sectionGrid##section->Add(sectionLabel##name, wxGBPosition(sectionColInd##section, 0), wxGBSpan(1, 1), wxEXPAND); \
 	sectionGrid##section->Add(sectionValue##name, wxGBPosition(sectionColInd##section, 2), wxGBSpan(1, 1), wxEXPAND); \
+	sectionGrid##section->Add(new wxHelpButton(panel, wxID_ANY, helpData), wxGBPosition(sectionColInd##section, 3), wxGBSpan(1, 1), wxEXPAND); \
 	sectionColInd##section++;
 
 #define APPEND_SECTION_FIRST(name) \
@@ -87,6 +93,10 @@
 	mainSizer->AddSpacer(5); \
 	sectionGrid##name->AddGrowableCol(2); \
 	mainSizer->Add(sectionBox##name, wxSizerFlags().Expand().Border(wxRIGHT | wxLEFT, 10));
+
+void ShowHelp(const char* name) {
+
+}
 
 template <typename... Params>
 inline const wxArrayString GetChoices(Params... params) {
@@ -111,8 +121,8 @@ cSetup::cSetup(wxWindow* main, SETTINGS* settings, bool startupInvalid, cSetup::
 
 	auto mainSizer = new wxBoxSizer(wxVERTICAL);
 	DEFINE_SECTION(general, LSTR(SETUP_GENERAL_LABEL));
-	ADD_ITEM_BROWSE(general, cacheDir, LSTR(SETUP_GENERAL_INSTFOLDER), CacheDir);
-	ADD_ITEM_CHOICE(general, compMethod, LSTR(SETUP_GENERAL_COMPMETHOD),
+	ADD_ITEM_BROWSE(general, cacheDir, LSTR(SETUP_GENERAL_INSTFOLDER), LSTR(SETUP_GENERAL_INSTFOLDER_HELP), CacheDir);
+	ADD_ITEM_CHOICE(general, compMethod, LSTR(SETUP_GENERAL_COMPMETHOD), LSTR(SETUP_GENERAL_COMPMETHOD_HELP),
 		GetChoices(
 			LSTR(SETUP_COMP_METHOD_DECOMP),
 			LSTR(SETUP_COMP_METHOD_ZSTD),
@@ -120,7 +130,7 @@ cSetup::cSetup(wxWindow* main, SETTINGS* settings, bool startupInvalid, cSetup::
 			LSTR(SETUP_COMP_METHOD_SELKIE)
 		),
 		SettingsCompressionMethod, CompressionMethod);
-	ADD_ITEM_TEXTSLIDER(general, compLevel, LSTR(SETUP_GENERAL_COMPLEVEL),
+	ADD_ITEM_TEXTSLIDER(general, compLevel, LSTR(SETUP_GENERAL_COMPLEVEL), LSTR(SETUP_GENERAL_COMPLEVEL_HELP),
 		GetChoices(
 			LSTR(SETUP_COMP_LEVEL_FASTEST),
 			LSTR(SETUP_COMP_LEVEL_FAST),
@@ -128,7 +138,7 @@ cSetup::cSetup(wxWindow* main, SETTINGS* settings, bool startupInvalid, cSetup::
 			LSTR(SETUP_COMP_LEVEL_SLOW),
 			LSTR(SETUP_COMP_LEVEL_SLOWEST)
 		), SettingsCompressionLevel, CompressionLevel);
-	ADD_ITEM_TEXTSLIDER(general, updateInt, LSTR(SETUP_GENERAL_UPDATEINT),
+	ADD_ITEM_TEXTSLIDER(general, updateInt, LSTR(SETUP_GENERAL_UPDATEINT), LSTR(SETUP_GENERAL_UPDATEINT_HELP),
 		GetChoices(
 			LSTR(SETUP_UPDATE_LEVEL_SEC1),
 			LSTR(SETUP_UPDATE_LEVEL_SEC5),
@@ -142,9 +152,9 @@ cSetup::cSetup(wxWindow* main, SETTINGS* settings, bool startupInvalid, cSetup::
 		), SettingsUpdateInterval, UpdateInterval);
 
 	DEFINE_SECTION(advanced, LSTR(SETUP_ADVANCED_LABEL));
-	ADD_ITEM_SLIDER(advanced, bufCount, LSTR(SETUP_ADVANCED_BUFCT), 1, 512, uint16_t, BufferCount);
-	ADD_ITEM_SLIDER(advanced, threadCount, LSTR(SETUP_ADVANCED_THDCT), 1, 128, uint16_t, ThreadCount);
-	ADD_ITEM_TEXT(advanced, cmdArgs, LSTR(SETUP_ADVANCED_CMDARGS), CommandArgs);
+	ADD_ITEM_SLIDER(advanced, bufCount, LSTR(SETUP_ADVANCED_BUFCT), LSTR(SETUP_ADVANCED_BUFCT_HELP), 1, 512, uint16_t, BufferCount);
+	ADD_ITEM_SLIDER(advanced, threadCount, LSTR(SETUP_ADVANCED_THDCT), LSTR(SETUP_ADVANCED_THDCT_HELP), 1, 128, uint16_t, ThreadCount);
+	ADD_ITEM_TEXT(advanced, cmdArgs, LSTR(SETUP_ADVANCED_CMDARGS), LSTR(SETUP_ADVANCED_CMDARGS_HELP), CommandArgs);
 
 	APPEND_SECTION_FIRST(general);
 	APPEND_SECTION(advanced);

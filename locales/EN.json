@@ -79,5 +79,13 @@
   "SETUP_COMP_METHOD_DECOMP": "No Compression",
   "SETUP_COMP_METHOD_ZSTD": "Zstandard",
   "SETUP_COMP_METHOD_LZ4": "LZ4",
-  "SETUP_COMP_METHOD_SELKIE": "Oodle Selkie"
+  "SETUP_COMP_METHOD_SELKIE": "Oodle Selkie",
+
+  "SETUP_GENERAL_INSTFOLDER_HELP": "This installation folder is where EGL2 will store all its files for Fortnite. This is not where you set the folder of your previous (official Epic Games Launcher) installation. EGL2 uses a completely separate storage mechanism for Fortnite which is incompatible and way different from your normal way of saving files. Make sure EGL2 is able to read and write in this folder and that this folder is empty (or previously used by EGL2).",
+  "SETUP_GENERAL_COMPMETHOD_HELP": "If you do not care about reducing your install size of Fortnite, just set this value to \"No Compression\". If you would like to use compression, use Oodle's Selkie. With Selkie, you can compress your install down by over half with barely any comprimises in game performance or update times.",
+  "SETUP_GENERAL_COMPLEVEL_HELP": "If you have set your compression method to not use compression, this setting will have no effect. This setting shouldn't have much of an effect when playing Fortnite. The general rule of thumb is: the slower your level, the more CPU it will take to update (which can cause updates to be slower), but your install size will be smaller.",
+  "SETUP_GENERAL_UPDATEINT_HELP": "This is how often EGL2 will check for a Fortnite update. This shouldn't really have a performance impact, but I have seen some people get rate limited when this value is set to 1 second.",
+  "SETUP_ADVANCED_BUFCT_HELP": "This is about how many megabytes of Fortnite's recently accessed data is stored in RAM. Having a sizeable buffer prevents Fortnite from using your storage drive again and possibly decompressing again.",
+  "SETUP_ADVANCED_THDCT_HELP": "This is about how many \"threads\" are run in parallel when updating, verifying, etc. If you are updating and this value is too high, this can seriously impact performance. But if this value is too low, you may not be using your internet or computer resources to its fullest extent.",
+  "SETUP_ADVANCED_CMDARGS_HELP": "These are the extra command arguments that are launched with Fortnite, nothing much here."
 }
