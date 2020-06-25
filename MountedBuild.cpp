@@ -341,7 +341,7 @@ void MountedBuild::PreloadAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHa
     std::unique_lock<std::mutex> lk(iterMtx);
     iterCv.wait(lk, [&] { return chunkDone || flag.cancelled(); });
 
-    Client::SetPoolSize(0);
+    Client::SetPoolSize(-1);
 
     for (int i = 0; i < threadCount; ++i) {
         threads[i].join();

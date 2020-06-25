@@ -14,8 +14,9 @@ public:
 	std::error_condition StartConnection(const std::shared_ptr<curlion::Connection>& connection);
 	std::error_condition AbortConnection(const std::shared_ptr<curlion::Connection>& connection);
 	
+	// -1: default
 	static inline void SetPoolSize(long poolSize) {
-		PoolSize = poolSize ? poolSize : DefaultPoolSize;
+		PoolSize = poolSize == -1 ? DefaultPoolSize : poolSize;
 	}
 
 	static inline std::shared_ptr<curlion::HttpConnection> CreateConnection() {
