@@ -31,6 +31,17 @@ enum
     StorageVerifyHashes         = 0x00001000, // Verify SHA hashes of downloaded chunks when reading and redownload if invalid
 };
 
+enum {
+    ChunkFlagDecompressed = 0x01,
+    ChunkFlagZstd         = 0x02,
+    ChunkFlagZlib         = 0x04,
+    ChunkFlagLZ4          = 0x08,
+    ChunkFlagOodle        = 0x09,
+
+    ChunkFlagCompCount    =    5,
+    ChunkFlagCompMask     = 0x0F,
+};
+
 enum class CHUNK_STATUS {
     Unavailable, // Readable from download
     Grabbing,    // Downloading
@@ -63,6 +74,7 @@ public:
     std::shared_ptr<char[]> GetChunk(std::shared_ptr<Chunk> Chunk, cancel_flag& flag);
     std::shared_ptr<char[]> GetChunkPart(ChunkPart& ChunkPart, cancel_flag& flag);
     Compressor::buffer_value DownloadChunk(std::shared_ptr<Chunk> Chunk, cancel_flag& flag, bool forceDownload = false);
+    bool GetChunkMetadata(std::shared_ptr<Chunk> Chunk, uint16_t& flags, size_t& fileSize);
 
 private:
     CHUNK_POOL_DATA& GetPoolData(std::shared_ptr<Chunk> Chunk);

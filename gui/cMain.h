@@ -4,8 +4,9 @@
 #include "../MountedBuild.h"
 #include "../web/manifest/auth.h"
 #include "../web/personal/PersonalAuth.h"
-#include "cSetup.h"
 #include "cProgress.h"
+#include "cSetup.h"
+#include "cStorage.h"
 #include "GameUpdateChecker.h"
 #include "settings.h"
 #include "UpdateChecker.h"
@@ -58,6 +59,7 @@ protected:
 	void OnSettingsClicked(bool onStartup);
 	void OnVerifyClicked();
 	void OnPlayClicked();
+	void OnStorageClicked();
 	
 	bool OnClose();
 
@@ -71,6 +73,7 @@ private:
 	wxWindowPtr<cProgress> VerifyWnd;
 	wxWindowPtr<cProgress> UpdateWnd;
 	wxWindowPtr<cSetup> SetupWnd;
+	wxWindowPtr<cStorage> StorageWnd;
 
 	bool FirstAuthLaunched = false;
 	std::shared_ptr<PersonalAuth> Auth;

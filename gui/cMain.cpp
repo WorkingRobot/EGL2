@@ -82,7 +82,7 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 	SIDE_BUTTON_CREATE(play, LSTR(MAIN_BTN_PLAY));
 
 	SIDE_BUTTON_BIND(settings, std::bind(&cMain::OnSettingsClicked, this, false));
-	SIDE_BUTTON_BIND(verify, std::bind(&cMain::OnVerifyClicked, this));
+	SIDE_BUTTON_BIND(verify, std::bind(&cMain::OnStorageClicked, this)); // OnVerifyClicked
 	SIDE_BUTTON_BIND(play, std::bind(&cMain::OnPlayClicked, this));
 	this->playBtn = SIDE_BUTTON_OBJ(play);
 	this->verifyBtn = SIDE_BUTTON_OBJ(verify);
@@ -363,6 +363,31 @@ void cMain::OnPlayClicked() {
 	}
 }
 
+void cMain::OnStorageClicked()
+{
+	if (StorageWnd) {
+		StorageWnd->Restore();
+		StorageWnd->Raise();
+		StorageWnd->SetFocus();
+		return;
+	}
+
+	if (UpdateWnd) {
+		UpdateWnd->Restore();
+		UpdateWnd->Raise();
+		UpdateWnd->SetFocus();
+		return;
+	}
+
+	StorageWnd = new cStorage(this, Build, Settings.ThreadCount, [=] {
+		StorageWnd->Destroy();
+		StorageWnd.reset();
+		this->Raise();
+		this->SetFocus();
+	});
+	StorageWnd->Show(true);
+}
+
 bool cMain::OnClose()
 {
 	if (Build) {
@@ -441,6 +466,11 @@ void cMain::BeginGameUpdate()
 	if (!GameUpdateAvailable) {
 		return;
 	}
+
+	if (StorageWnd) {
+		StorageWnd->Close(true);
+	}
+
 	std::thread([this]() {
 		if (!GameUpdateUrl.has_value()) {
 			LOG_DEBUG("Downloading unavailable chunks");

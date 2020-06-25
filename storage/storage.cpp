@@ -163,14 +163,6 @@ CHUNK_STATUS Storage::GetUnpooledChunkStatus(std::shared_ptr<Chunk> Chunk)
     return IsChunkDownloaded(Chunk) ? CHUNK_STATUS::Available : CHUNK_STATUS::Unavailable;
 }
 
-enum {
-    ChunkFlagDecompressed = 0x01,
-    ChunkFlagZstd = 0x02,
-    ChunkFlagZlib = 0x04,
-    ChunkFlagLZ4 = 0x08,
-    ChunkFlagOodle = 0x09,
-    ChunkFlagCompMask = 0xF
-};
 #pragma pack(push, 1)
 struct CHUNK_HEADER {
     uint16_t version;
@@ -268,6 +260,21 @@ Compressor::buffer_value Storage::DownloadChunk(std::shared_ptr<Chunk> Chunk, ca
     SAFE_FLAG_RETURN(std::make_pair(data, Chunk->WindowSize));
     WriteChunk(CachePath / Chunk->GetFilePath(), Chunk->WindowSize, Compressor.StorageCompress(data, Chunk->WindowSize));
     return std::make_pair(data, Chunk->WindowSize);
+}
+
+bool Storage::GetChunkMetadata(std::shared_ptr<Chunk> Chunk, uint16_t& flags, size_t& fileSize)
+{
+    auto fp = fopen((CachePath / Chunk->GetFilePath()).string().c_str(), "rb");
+    CHUNK_HEADER header;
+    fread(&header, sizeof(CHUNK_HEADER), 1, fp);
+    if (header.version != 0) {
+        LOG_ERROR("Bad chunk version for %s: %hu", Chunk->GetGuid().c_str(), header.version);
+        return false;
+    }
+    fclose(fp);
+    flags = header.flags;
+    fileSize = fs::file_size(CachePath / Chunk->GetFilePath());
+    return true;
 }
 
 bool Storage::ReadChunk(fs::path Path, Compressor::buffer_value& ReadBuffer, cancel_flag& flag)

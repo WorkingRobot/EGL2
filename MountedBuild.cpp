@@ -321,7 +321,7 @@ void MountedBuild::PreloadAllChunks(ProgressSetMaxHandler setMax, ProgressIncrHa
         return chunkEnd;
     };
 
-    auto threadJob = [&] {
+    auto threadJob = [&, this] {
         while (!chunkDone && !flag.cancelled()) {
             auto chunk = GetChunk();
             if (chunk == chunkEnd) {
@@ -442,6 +442,67 @@ void MountedBuild::PurgeUnusedChunks(cancel_flag& flag) {
         }
     }
     LOG_DEBUG("purged");
+}
+
+void MountedBuild::QueryChunks(QueryChunkCallback onQuery, cancel_flag& flag, uint32_t threadCount)
+{
+    auto threads = std::make_unique<std::thread[]>(threadCount);
+
+    std::mutex iterMtx;
+    std::condition_variable iterCv;
+
+    auto chunkIter = Build.ChunkManifestList.begin();
+    auto chunkEnd = Build.ChunkManifestList.end();
+    std::atomic_bool chunkDone = false;
+
+    auto GetChunk = [&] {
+        std::unique_lock<std::mutex> lk(iterMtx);
+        if (++chunkIter != chunkEnd) {
+            return chunkIter;
+        }
+        chunkDone = true;
+        lk.unlock();
+        iterCv.notify_all();
+        return chunkEnd;
+    };
+
+    auto threadJob = [&, this] {
+        ChunkMetadata data;
+        while (!chunkDone && !flag.cancelled()) {
+            auto chunk = GetChunk();
+            if (chunk == chunkEnd) {
+                return;
+            }
+            SAFE_FLAG_RETURN();
+            data.Chunk = *chunk;
+            if (StorageData.IsChunkDownloaded(data.Chunk)) {
+                data.Downloaded = true;
+                StorageData.GetChunkMetadata(data.Chunk, data.Flags, data.FileSize);
+            }
+            else {
+                data.Downloaded = false;
+                data.Flags = 0;
+                data.FileSize = 0;
+            }
+            SAFE_FLAG_RETURN();
+            onQuery(data, false);
+        }
+    };
+
+    for (int i = 0; i < threadCount; ++i) {
+        threads[i] = std::thread(threadJob);
+    }
+
+    std::unique_lock<std::mutex> lk(iterMtx);
+    iterCv.wait(lk, [&] { return chunkDone || flag.cancelled(); });
+
+    for (int i = 0; i < threadCount; ++i) {
+        threads[i].join();
+    }
+
+    if (!flag.cancelled()) {
+        onQuery({}, true);
+    }
 }
 
 uint32_t MountedBuild::GetMissingChunkCount()
