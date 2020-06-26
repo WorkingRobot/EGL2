@@ -3,5 +3,9 @@ out/
 
 cert.pfx
 cert.pwd
-# You can get the locales.dat by just running LocaleTool.exe anyway
+
+# You can get locales.dat by just running LocaleTool.exe anyway
 locales.dat
+
+# You can get help.chm by just running hhw.exe or some hhp compiler
+help.chm
