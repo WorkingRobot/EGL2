@@ -42,7 +42,7 @@
       "configurationType": "Release",
       "buildRoot": "${projectDir}\\out\\build\\${name}",
       "installRoot": "${projectDir}\\out\\install\\${name}",
-      "cmakeCommandArgs": "-DVCPKG_TARGET_TRIPLET=x64-windows-static",
+      "cmakeCommandArgs": "-DVCPKG_TARGET_TRIPLET=x64-windows-static -DENABLE_SIGNING:BOOL=ON",
       "buildCommandArgs": "-v",
       "ctestCommandArgs": "",
       "inheritEnvironments": [ "msvc_x64_x64" ],

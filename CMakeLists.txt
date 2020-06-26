@@ -4,6 +4,7 @@ project (EGL2)
 
 set(WX_DIR "J:\\Code\\wxWidgets" CACHE PATH "wxWidgets directory" FORCE)
 option(ENABLE_CONSOLE "Use console subsystem" OFF)
+option(ENABLE_SIGNING "Sign the executable" OFF)
 
 aux_source_directory(. FILE_SOURCES)
 aux_source_directory(filesystem FILESYSTEM_FILE_SOURCES)
@@ -66,11 +67,11 @@ find_package(lz4 REQUIRED)
 find_package(zstd CONFIG REQUIRED)
 find_package(CURL CONFIG REQUIRED)
 find_package(LibLZMA CONFIG REQUIRED)
-find_package(BOOST 1.68.0 REQUIRED COMPONENTS asio)
-find_package(wxWidgets REQUIRED COMPONENTS core base png zlib)
+find_package(BOOST REQUIRED COMPONENTS asio)
+find_package(wxWidgets REQUIRED COMPONENTS core base)
 include(${wxWidgets_USE_FILE})
 
-if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+if (ENABLE_SIGNING)
 message(STATUS "Signing files")
 file(READ "cert.pwd" SIGN_PASS)
 add_custom_command(TARGET EGL2 POST_BUILD
@@ -122,6 +123,7 @@ target_link_libraries(EGL2 PRIVATE
     libzstd
     lz4::lz4
     LibLZMA::LibLZMA
+    Htmlhelp
     delayimp
     "${CMAKE_CURRENT_SOURCE_DIR}\\libraries\\libdeflate\\libdeflatestatic.lib"
     "${CMAKE_CURRENT_SOURCE_DIR}\\libraries\\oodle\\oo2core_8_win64.lib")
