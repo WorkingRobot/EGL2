@@ -24,22 +24,6 @@
 #include <wx/notifmsg.h>
 #include <wx/generic/notifmsg.h>
 
-#define SIDE_BUTTON_CREATE(name, text) \
-	auto btn_frame_##name = new wxPanel(panel, wxID_ANY); \
-	auto btn_sizer_##name = new wxBoxSizer(wxVERTICAL); \
-    auto btn_##name = new wxButton(btn_frame_##name, wxID_ANY, text, wxDefaultPosition, wxSize(120, -1)); \
-	btn_sizer_##name->Add(btn_##name, 1, wxEXPAND); \
-	btn_frame_##name->SetSizerAndFit(btn_sizer_##name);
-#define SIDE_BUTTON_BIND(name, func) \
-	btn_##name->Bind(wxEVT_BUTTON, func);
-#define SIDE_BUTTON_FRAME(name) btn_frame_##name
-#define SIDE_BUTTON_OBJ(name) btn_##name
-#define SIDE_BUTTON_DESC(name, desc) \
-	btn_frame_##name->Bind(wxEVT_MOTION, std::bind(&cMain::OnButtonHover, this, desc)); \
-	btn_##name->Bind(wxEVT_MOTION, std::bind(&cMain::OnButtonHover, this, desc)); \
-	btn_frame_##name->Bind(wxEVT_LEAVE_WINDOW, std::bind(&cMain::OnButtonHover, this, LSTR(MAIN_DESC_DEFAULT))); \
-	btn_##name->Bind(wxEVT_LEAVE_WINDOW, std::bind(&cMain::OnButtonHover, this, LSTR(MAIN_DESC_DEFAULT)));
-
 #define CREATE_STAT(name, displayName, range) \
 	stat##name##Label = new wxStaticText(panel, wxID_ANY, displayName, wxDefaultPosition, wxDefaultSize, wxALIGN_RIGHT); \
 	stat##name##Value = new wxGauge(panel, wxID_ANY, range, wxDefaultPosition, wxSize(100, -1)); \
@@ -58,12 +42,12 @@
 #define STAT_VALUE(name) stat##name##Value
 #define STAT_TEXT(name) stat##name##Text
 
-cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestPath, const std::shared_ptr<PersonalAuth>& personalAuth) : wxFrame(nullptr, wxID_ANY, "EGL2", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)),
-	App(app),
-	SettingsPath(settingsPath),
-	Settings(SettingsDefault()),
-	Auth(personalAuth),
-	GameUpdateAvailable(false) {
+cMain::cMain(wxApp * app, const fs::path & settingsPath, const fs::path & manifestPath, const std::shared_ptr<PersonalAuth> & personalAuth) : wxFrame(nullptr, wxID_ANY, "EGL2", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE ^ (wxMAXIMIZE_BOX | wxRESIZE_BORDER)),
+App(app),
+SettingsPath(settingsPath),
+Settings(SettingsDefault()),
+Auth(personalAuth),
+GameUpdateAvailable(false) {
 	LOG_DEBUG("Setting up (%s, %s)", settingsPath.string().c_str(), manifestPath.string().c_str());
 
 	this->SetIcon(wxICON(APP_ICON));
@@ -71,91 +55,118 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 	this->SetMaxSize(wxSize(CMAIN_W, CMAIN_H));
 
 	LOG_DEBUG("Setting up UI");
+	{
+		panel = new wxPanel(this, wxID_ANY,
+			wxDefaultPosition,
+			wxDefaultSize,
+			wxTAB_TRAVERSAL);
 
-	panel = new wxPanel(this, wxID_ANY,
-		wxDefaultPosition,
-		wxDefaultSize,
-		wxTAB_TRAVERSAL);
+		{
+			auto SizeHandler = [](wxHelpButton* helpBtn) {
+				helpBtn->SetPosition(wxPoint(helpBtn->GetParent()->GetSize().GetWidth() - helpBtn->GetSize().GetWidth(), -1));
+			};
 
-	SIDE_BUTTON_CREATE(settings, LSTR(MAIN_BTN_SETTINGS));
-	SIDE_BUTTON_CREATE(verify, LSTR(MAIN_BTN_VERIFY));
-	SIDE_BUTTON_CREATE(play, LSTR(MAIN_BTN_PLAY));
+			settingsBtn = new wxButton(panel, wxID_ANY, LSTR(MAIN_BTN_SETTINGS));
+			settingsHelpBtn = new wxHelpButton(settingsBtn, wxID_ANY, LSTR_LOC(MAIN_BTN_SETTINGS));
 
-	SIDE_BUTTON_BIND(settings, std::bind(&cMain::OnSettingsClicked, this, false));
-	SIDE_BUTTON_BIND(verify, std::bind(&cMain::OnStorageClicked, this)); // OnVerifyClicked
-	SIDE_BUTTON_BIND(play, std::bind(&cMain::OnPlayClicked, this));
-	this->playBtn = SIDE_BUTTON_OBJ(play);
-	this->verifyBtn = SIDE_BUTTON_OBJ(verify);
+			settingsBtn->Bind(wxEVT_SIZE, std::bind(SizeHandler, settingsHelpBtn));
+			settingsBtn->Bind(wxEVT_BUTTON, std::bind(&cMain::OnSettingsClicked, this, false));
 
-	SIDE_BUTTON_OBJ(verify)->Disable();
-	SIDE_BUTTON_OBJ(play)->Disable();
+			storageBtn = new wxButton(panel, wxID_ANY, LSTR(MAIN_BTN_STORAGE));
+			storageHelpBtn = new wxHelpButton(storageBtn, wxID_ANY, LSTR_LOC(MAIN_BTN_STORAGE));
 
-	SIDE_BUTTON_DESC(settings, LSTR(MAIN_DESC_SETTINGS));
-	SIDE_BUTTON_DESC(verify, LSTR(MAIN_DESC_VERIFY));
-	SIDE_BUTTON_DESC(play, LSTR(MAIN_DESC_PLAY));
+			storageBtn->Bind(wxEVT_SIZE, std::bind(SizeHandler, storageHelpBtn));
+			storageBtn->Bind(wxEVT_BUTTON, std::bind(&cMain::OnStorageClicked, this));
 
-	statusBar = new wxStaticText(panel, wxID_ANY, wxEmptyString);
-	selloutBar = new wxStaticText(panel, wxID_ANY, LSTR(MAIN_STATUS_SELLOUT));
+			verifyBtn = new wxButton(panel, wxID_ANY, LSTR(MAIN_BTN_VERIFY));
+			verifyHelpBtn = new wxHelpButton(verifyBtn, wxID_ANY, LSTR_LOC(MAIN_BTN_VERIFY));
 
-	descBox = new wxStaticBoxSizer(wxVERTICAL, panel, LSTR(MAIN_DESC_TITLE));
-	descTxt = new wxStaticText(panel, wxID_ANY, LSTR(MAIN_DESC_DEFAULT));
-	descBox->Add(descTxt, 1, wxEXPAND);
+			verifyBtn->Bind(wxEVT_SIZE, std::bind(SizeHandler, verifyHelpBtn));
+			verifyBtn->Bind(wxEVT_BUTTON, std::bind(&cMain::OnVerifyClicked, this));
 
-	statsBox = new wxStaticBoxSizer(wxVERTICAL, panel, LSTR(MAIN_STATS_TITLE));
-	auto statsSizer = new wxBoxSizer(wxHORIZONTAL);
-	auto statsSizerL = new wxGridBagSizer(2, 4);
-	auto statsSizerR = new wxGridBagSizer(2, 4);
-	int statColInd = 0;
+			playBtn = new wxButton(panel, wxID_ANY, LSTR(MAIN_BTN_PLAY));
+			playHelpBtn = new wxHelpButton(playBtn, wxID_ANY, LSTR_LOC(MAIN_BTN_PLAY));
 
-	CREATE_STAT(cpu, LSTR(MAIN_STATS_CPU), 1000); // divide by 10 to get %
-	CREATE_STAT(ram, LSTR(MAIN_STATS_RAM), 512 * 1024 * 1024); // 512 mb
-	CREATE_STAT(read, LSTR(MAIN_STATS_READ), 256 * 1024 * 1024); // 256 mb/s
-	CREATE_STAT(write, LSTR(MAIN_STATS_WRITE), 64 * 1024 * 1024); // 64 mb/s
-	CREATE_STAT(provide, LSTR(MAIN_STATS_PROVIDE), 256 * 1024 * 1024); // 256 mb/s
-	CREATE_STAT(download, LSTR(MAIN_STATS_DOWNLOAD), 64 * 1024 * 1024); // 512 mbps
-	CREATE_STAT(latency, LSTR(MAIN_STATS_LATENCY), 1000); // divide by 10 to get ms
-	CREATE_STAT(threads, LSTR(MAIN_STATS_THREADS), 192); // 192 threads (threads don't ruin performance, probably just indicates overhead)
+			playBtn->Bind(wxEVT_SIZE, std::bind(SizeHandler, playHelpBtn));
+			playBtn->Bind(wxEVT_BUTTON, std::bind(&cMain::OnPlayClicked, this));
 
-	statsSizer->Add(statsSizerL);
-	statsSizer->AddStretchSpacer();
-	statsSizer->Add(statsSizerR);
-	statsBox->Add(statsSizer, 1, wxEXPAND);
+			storageBtn->Disable();
+			verifyBtn->Disable();
+			playBtn->Disable();
+		}
 
-	auto barSizer = new wxBoxSizer(wxHORIZONTAL);
-	barSizer->Add(statusBar);
-	barSizer->AddStretchSpacer();
-	barSizer->Add(selloutBar);
+		{
+			statusBar = new wxStaticText(panel, wxID_ANY, wxEmptyString);
+			selloutBar = new wxStaticText(panel, wxID_ANY, LSTR(MAIN_STATUS_SELLOUT));
+		}
 
-	auto buttonSizer = new wxBoxSizer(wxVERTICAL);
-	buttonSizer->Add(SIDE_BUTTON_FRAME(settings), 1, wxEXPAND);
-	buttonSizer->Add(SIDE_BUTTON_FRAME(verify), 1, wxEXPAND);
-	buttonSizer->Add(SIDE_BUTTON_FRAME(play), 1, wxEXPAND);
+		{
+			statsBox = new wxStaticBoxSizer(wxVERTICAL, panel, LSTR(MAIN_STATS_TITLE));
+			auto statsSizer = new wxBoxSizer(wxHORIZONTAL);
+			auto statsSizerL = new wxGridBagSizer(2, 4);
+			auto statsSizerR = new wxGridBagSizer(2, 4);
+			int statColInd = 0;
 
-	auto grid = new wxGridBagSizer(2, 2);
-	grid->Add(buttonSizer, wxGBPosition(0, 0), wxGBSpan(1, 1), wxEXPAND);
-	grid->Add(descBox, wxGBPosition(0, 1), wxGBSpan(1, 1), wxEXPAND);
-	grid->Add(statsBox, wxGBPosition(1, 0), wxGBSpan(1, 2), wxEXPAND);
-	grid->Add(barSizer, wxGBPosition(2, 0), wxGBSpan(1, 2), wxEXPAND);
+			CREATE_STAT(cpu, LSTR(MAIN_STATS_CPU), 1000); // divide by 10 to get %
+			CREATE_STAT(ram, LSTR(MAIN_STATS_RAM), 512 * 1024 * 1024); // 512 mb
+			CREATE_STAT(read, LSTR(MAIN_STATS_READ), 256 * 1024 * 1024); // 256 mb/s
+			CREATE_STAT(write, LSTR(MAIN_STATS_WRITE), 64 * 1024 * 1024); // 64 mb/s
+			CREATE_STAT(provide, LSTR(MAIN_STATS_PROVIDE), 256 * 1024 * 1024); // 256 mb/s
+			CREATE_STAT(download, LSTR(MAIN_STATS_DOWNLOAD), 64 * 1024 * 1024); // 512 mbps
+			CREATE_STAT(latency, LSTR(MAIN_STATS_LATENCY), 1000); // divide by 10 to get ms
+			CREATE_STAT(threads, LSTR(MAIN_STATS_THREADS), 192); // 192 threads (threads don't ruin performance, probably just indicates overhead)
 
-	grid->AddGrowableCol(0, 1);
-	grid->AddGrowableCol(1, 1);
-	grid->AddGrowableRow(0);
+			statsSizer->Add(statsSizerL);
+			statsSizer->AddStretchSpacer();
+			statsSizer->Add(statsSizerR);
+			statsBox->Add(statsSizer, 1, wxEXPAND);
+		}
 
-	auto topSizer = new wxBoxSizer(wxVERTICAL);
-	topSizer->Add(grid, wxSizerFlags(1).Expand().Border(wxALL, 5));
-	this->SetSize(wxSize(CMAIN_W, CMAIN_H));
-	panel->SetSizerAndFit(topSizer);
-	grid->RepositionChildren(wxSize(-1, -1));
+		wxBoxSizer* barSizer;
+		{
+			barSizer = new wxBoxSizer(wxHORIZONTAL);
+			barSizer->Add(statusBar);
+			barSizer->AddStretchSpacer();
+			barSizer->Add(selloutBar);
+		}
+
+		wxGridSizer* buttonSizer;
+		{
+			buttonSizer = new wxGridSizer(2, 2, 3, 3);
+			buttonSizer->Add(settingsBtn, 1, wxEXPAND);
+			buttonSizer->Add(storageBtn, 1, wxEXPAND);
+			buttonSizer->Add(verifyBtn, 1, wxEXPAND);
+			buttonSizer->Add(playBtn, 1, wxEXPAND);
+		}
+
+		wxBoxSizer* grid;
+		{
+			grid = new wxBoxSizer(wxVERTICAL);
+			grid->Add(buttonSizer, wxSizerFlags(1).Expand());
+			grid->Add(statsBox, wxSizerFlags().Expand());
+			grid->Add(barSizer, wxSizerFlags().Expand());
+		}
+
+		{
+			auto topSizer = new wxBoxSizer(wxVERTICAL);
+			topSizer->Add(grid, wxSizerFlags(1).Expand().Border(wxALL, 5));
+			this->SetSize(wxSize(CMAIN_W, CMAIN_H));
+			panel->SetSizerAndFit(topSizer);
+			grid->RepositionChildren(wxSize(-1, -1));
+		}
+	}
 
 	LOG_DEBUG("Getting settings");
-	auto settingsFp = fopen(SettingsPath.string().c_str(), "rb");
-	if (settingsFp) {
-		LOG_DEBUG("Reading settings file");
-		SettingsRead(&Settings, settingsFp);
-		fclose(settingsFp);
-	}
-	else {
-		LOG_DEBUG("Using default settings");
+	{
+		auto settingsFp = fopen(SettingsPath.string().c_str(), "rb");
+		if (settingsFp) {
+			LOG_DEBUG("Reading settings file");
+			SettingsRead(&Settings, settingsFp);
+			fclose(settingsFp);
+		}
+		else {
+			LOG_DEBUG("Using default settings");
+		}
 	}
 
 	LOG_DEBUG("Validating settings");
@@ -223,8 +234,9 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 		Mount(GameUpdater->GetLatestUrl());
 		LOG_DEBUG("Enabling buttons");
 		SetStatus(LSTR(MAIN_STATUS_PLAYABLE));
-		SIDE_BUTTON_OBJ(verify)->Enable();
-		SIDE_BUTTON_OBJ(play)->Enable();
+		storageBtn->Enable();
+		verifyBtn->Enable();
+		playBtn->Enable();
 		LOG_DEBUG("Checking chunk count");
 		auto ct = Build->GetMissingChunkCount();
 		LOG_DEBUG("%d missing chunks", ct);
@@ -232,7 +244,6 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 			OnGameUpdate(GameUpdater->GetLatestVersion());
 		}
 	}).detach();
-
 
 	std::thread([=]() {
 		LOG_DEBUG("Creating update checker");
@@ -248,15 +259,6 @@ cMain::cMain(wxApp* app, const fs::path& settingsPath, const fs::path& manifestP
 
 cMain::~cMain() {
 
-}
-
-void cMain::OnButtonHover(const wxString& string) {
-	if (descTxt->GetLabel().compare(string)) {
-		descTxt->SetLabel(string);
-		descBox->Fit(descTxt);
-		descBox->FitInside(descTxt);
-		descBox->Layout();
-	}
 }
 
 void cMain::OnSettingsClicked(bool onStartup) {
@@ -284,6 +286,31 @@ void cMain::OnSettingsClicked(bool onStartup) {
 		SetupWnd->Raise();
 		SetupWnd->SetFocus();
 	}
+}
+
+void cMain::OnStorageClicked()
+{
+	if (StorageWnd) {
+		StorageWnd->Restore();
+		StorageWnd->Raise();
+		StorageWnd->SetFocus();
+		return;
+	}
+
+	if (UpdateWnd) {
+		UpdateWnd->Restore();
+		UpdateWnd->Raise();
+		UpdateWnd->SetFocus();
+		return;
+	}
+
+	StorageWnd = new cStorage(this, Build, Settings.ThreadCount, [=] {
+		StorageWnd->Destroy();
+		StorageWnd.reset();
+		this->Raise();
+		this->SetFocus();
+	});
+	StorageWnd->Show(true);
 }
 
 #define RUN_PROGRESS(taskName, wndPtr, runAfter, funcName, ...)	\
@@ -361,31 +388,6 @@ void cMain::OnPlayClicked() {
 			LOG_ERROR("Could not get exchange code to launch");
 		}
 	}
-}
-
-void cMain::OnStorageClicked()
-{
-	if (StorageWnd) {
-		StorageWnd->Restore();
-		StorageWnd->Raise();
-		StorageWnd->SetFocus();
-		return;
-	}
-
-	if (UpdateWnd) {
-		UpdateWnd->Restore();
-		UpdateWnd->Raise();
-		UpdateWnd->SetFocus();
-		return;
-	}
-
-	StorageWnd = new cStorage(this, Build, Settings.ThreadCount, [=] {
-		StorageWnd->Destroy();
-		StorageWnd.reset();
-		this->Raise();
-		this->SetFocus();
-	});
-	StorageWnd->Show(true);
 }
 
 bool cMain::OnClose()

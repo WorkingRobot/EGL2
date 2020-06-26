@@ -4,6 +4,7 @@
 #define LOG_SECTION "HelpBtn"
 #endif
 
+#include "../containers/file_sha.h"
 #include "../Logger.h"
 
 #include <HtmlHelp.h>
@@ -32,7 +33,7 @@ wxHelpButton::wxHelpButton(wxWindow* parent, wxWindowID id, const wchar_t* helpF
 	wxBitmapButton(parent, id, csquery_bmp, wxDefaultPosition, wxSize(24, 24)),
 	Topic(helpFile)
 {
-	Bind(wxEVT_BUTTON, &wxHelpButton::_OnClick, this);
+	Bind(wxEVT_BUTTON, &wxHelpButton::OnClick, this);
 	Bind(wxEVT_SIZE, [this] (wxSizeEvent& evt) { // keeps it 1:1 aspect ratio
 		auto size = std::min(evt.GetSize().GetWidth(), evt.GetSize().GetHeight());
 		evt.SetSize(wxSize(size, size));
@@ -40,13 +41,21 @@ wxHelpButton::wxHelpButton(wxWindow* parent, wxWindowID id, const wchar_t* helpF
 	});
 }
 
+constexpr char ChmSha[20] = { 0x72, 0xB9, 0x40, 0xC7, 0x2B, 0x9E, 0x59, 0xF5, 0x5A, 0x98, 0x90, 0x97, 0xC5, 0x1A, 0x18, 0x18, 0x3B, 0x44, 0x73, 0xDF };
+
 bool VerifyChmFile(const fs::path& cacheFile) {
     std::error_code ec;
     if (fs::is_regular_file(cacheFile, ec)) {
-        if (fs::file_size(cacheFile, ec) > 8 * 1024) { // it's at least 8 kb, just check if it wasn't written properly
-            return true;
+        if (fs::file_size(cacheFile, ec) > 8 * 1024) {
+            char fileSha[20];
+            if (SHAFile(cacheFile, fileSha)) {
+                if (!memcmp(fileSha, ChmSha, 20)) {
+                    return true;
+                }
+            }
         }
     }
+    LOG_INFO("Grabbing chm file from resources");
     auto resInfo = FindResource(NULL, L"CHM_HELP", RT_RCDATA);
     if (!resInfo) {
         LOG_FATAL("Could not find locale resource!");
@@ -91,7 +100,7 @@ bool wxHelpButton::LoadHelp(const fs::path& cachePath)
     return true;
 }
 
-void wxHelpButton::_OnClick(wxCommandEvent& evt)
+void wxHelpButton::OnClick(wxCommandEvent& evt)
 {
 	auto helpHwnd = HtmlHelp(GetHWND(), File.c_str(), HH_DISPLAY_TOPIC, (DWORD_PTR)Topic);
 }

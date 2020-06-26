@@ -10,6 +10,7 @@
 #include "GameUpdateChecker.h"
 #include "settings.h"
 #include "UpdateChecker.h"
+#include "wxHelpButton.h"
 
 #include <wx/taskbar.h>
 #include <wx/windowptr.h>
@@ -27,11 +28,14 @@ public:
 protected:
 	wxPanel* panel = nullptr;
 
+	wxButton* settingsBtn = nullptr;
+	wxHelpButton* settingsHelpBtn = nullptr;
+	wxButton* storageBtn = nullptr;
+	wxHelpButton* storageHelpBtn = nullptr;
 	wxButton* verifyBtn = nullptr;
+	wxHelpButton* verifyHelpBtn = nullptr;
 	wxButton* playBtn = nullptr;
-
-	wxStaticBoxSizer* descBox = nullptr;
-	wxStaticText* descTxt = nullptr;
+	wxHelpButton* playHelpBtn = nullptr;
 
 	wxStaticBoxSizer* statsBox = nullptr;
 
@@ -54,12 +58,10 @@ protected:
 	wxStaticText* statusBar = nullptr;
 	wxStaticText* selloutBar = nullptr;
 
-	void OnButtonHover(const wxString& string);
-
 	void OnSettingsClicked(bool onStartup);
+	void OnStorageClicked();
 	void OnVerifyClicked();
 	void OnPlayClicked();
-	void OnStorageClicked();
 	
 	bool OnClose();
 

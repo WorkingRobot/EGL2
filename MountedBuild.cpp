@@ -469,15 +469,16 @@ void MountedBuild::QueryChunks(QueryChunkCallback onQuery, cancel_flag& flag, ui
     auto threadJob = [&, this] {
         ChunkMetadata data;
         while (!chunkDone && !flag.cancelled()) {
-            auto chunk = GetChunk();
-            if (chunk == chunkEnd) {
+            auto chunkPtr = GetChunk();
+            if (chunkPtr == chunkEnd) {
                 return;
             }
             SAFE_FLAG_RETURN();
-            data.Chunk = *chunk;
-            if (StorageData.IsChunkDownloaded(data.Chunk)) {
+            auto chunk = *chunkPtr;
+            data.Chunk = chunk;
+            if (StorageData.IsChunkDownloaded(chunk)) {
                 data.Downloaded = true;
-                StorageData.GetChunkMetadata(data.Chunk, data.Flags, data.FileSize);
+                StorageData.GetChunkMetadata(chunk, data.Flags, data.FileSize);
             }
             else {
                 data.Downloaded = false;

@@ -10,17 +10,12 @@
   "APP_ERROR_WINFSP_FIND": "Could not find WinFsp's DLL in the driver's folder. Try reinstalling WinFsp.",
   "APP_ERROR_WINFSP_LOAD": "Could not load WinFsp's DLL in the driver's folder. Try reinstalling WinFsp.",
   "APP_ERROR_WINFSP_UNKNOWN": "An unknown error occurred when trying to load WinFsp's DLL: %d",
-  "MAIN_DESC_DEFAULT": "Hover over a button to see what it does",
-  "MAIN_DESC_SETTINGS": "Configure your install",
-  "MAIN_DESC_VERIFY": "Verifies your game (in case you have corrupt data)",
-  "MAIN_DESC_PLAY": "Launch Fortnite!",
   "MAIN_STATUS_STARTING": "Starting up...",
   "MAIN_STATUS_PLAYABLE": "Started! Press \"Play\" to start playing!",
   "MAIN_BTN_SETTINGS": "Settings",
   "MAIN_BTN_VERIFY": "Verify",
   "MAIN_BTN_PLAY": "Play",
   "MAIN_STATUS_SELLOUT": "Use code \"furry\"! (#ad)",
-  "MAIN_DESC_TITLE": "Description",
   "MAIN_STATS_TITLE": "Stats",
   "MAIN_STATS_CPU": "CPU",
   "MAIN_STATS_RAM": "RAM",
@@ -81,5 +76,6 @@
   "SETUP_COMP_METHOD_LZ4": "LZ4",
   "SETUP_COMP_METHOD_SELKIE": "Oodle Selkie",
 
-  "APP_ERROR_CHM": "Could not create EGL2 chm file"
+  "APP_ERROR_CHM": "Could not create EGL2 chm file",
+  "MAIN_BTN_STORAGE": "Storage"
 }

@@ -21,14 +21,10 @@
     LS(APP_ERROR_OODLE_INCOMPAT)       /* Error to show if Oodle's dll is incompatible with EGL2                                */ \
     LS(APP_ERROR_CHM)                  /* Error to show if the chm file could not be loaded/created                             */ \
     LS(MAIN_BTN_SETTINGS)              /* Settings button name                                                                  */ \
+    LS(MAIN_BTN_STORAGE)               /* Storage button name                                                                   */ \
     LS(MAIN_BTN_VERIFY)                /* Verify button name                                                                    */ \
     LS(MAIN_BTN_PLAY)                  /* Play button name                                                                      */ \
     LS(MAIN_BTN_UPDATE)                /* Update button name                                                                    */ \
-    LS(MAIN_DESC_TITLE)                /* Button description box title                                                          */ \
-    LS(MAIN_DESC_DEFAULT)              /* Default button description                                                            */ \
-    LS(MAIN_DESC_SETTINGS)             /* Settings button description                                                           */ \
-    LS(MAIN_DESC_VERIFY)               /* Verify button description                                                             */ \
-    LS(MAIN_DESC_PLAY)                 /* Play button description                                                               */ \
     LS(MAIN_STATUS_STARTING)           /* Status bar for when starting up                                                       */ \
     LS(MAIN_STATUS_PLAYABLE)           /* Status bar for when game is playable                                                  */ \
     LS(MAIN_STATUS_SELLOUT)            /* Next to status bar for my SAC sellout                                                 */ \

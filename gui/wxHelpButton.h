@@ -21,5 +21,5 @@ private:
 
     const wchar_t* Topic = nullptr;
 
-    void _OnClick(wxCommandEvent& evt);
+    void OnClick(wxCommandEvent& evt);
 };
