@@ -19,6 +19,7 @@
     LS(APP_ERROR_OODLE_WRITE)          /* Error to show if Oodle's dll couldn't be written                                      */ \
     LS(APP_ERROR_OODLE_UNKNOWN)        /* Error to show if an unknown error occurred when loading Oodle                         */ \
     LS(APP_ERROR_OODLE_INCOMPAT)       /* Error to show if Oodle's dll is incompatible with EGL2                                */ \
+    LS(APP_ERROR_CHM)                  /* Error to show if the chm file could not be loaded/created                             */ \
     LS(MAIN_BTN_SETTINGS)              /* Settings button name                                                                  */ \
     LS(MAIN_BTN_VERIFY)                /* Verify button name                                                                    */ \
     LS(MAIN_BTN_PLAY)                  /* Play button name                                                                      */ \
@@ -80,14 +81,7 @@
     LS(SETUP_ADVANCED_THDCT)           /* Number of threads to use when verifying or updating                                   */ \
     LS(SETUP_ADVANCED_CMDARGS)         /* Command arguments to launch with Fortnite                                             */ \
     LS(SETUP_BTN_OK)                   /* OK button in setup                                                                    */ \
-    LS(SETUP_BTN_CANCEL)               /* Cancel button in setup                                                                */ \
-    LS(SETUP_GENERAL_INSTFOLDER_HELP)  /* Install folder help message                                                           */ \
-    LS(SETUP_GENERAL_COMPMETHOD_HELP)  /* Compression method help message                                                       */ \
-    LS(SETUP_GENERAL_COMPLEVEL_HELP)   /* Compression level help message                                                        */ \
-    LS(SETUP_GENERAL_UPDATEINT_HELP)   /* Update interval help message                                                          */ \
-    LS(SETUP_ADVANCED_BUFCT_HELP)      /* Buffer count help message                                                             */ \
-    LS(SETUP_ADVANCED_THDCT_HELP)      /* Thread count help message                                                             */ \
-    LS(SETUP_ADVANCED_CMDARGS_HELP)    /* Command args help message                                                             */ \
+    LS(SETUP_BTN_CANCEL)               /* Cancel button in setup                                                                */
 
 #define LOCALETYPES \
     LS(AR)      /* Arabic               */ \

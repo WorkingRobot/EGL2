@@ -6,6 +6,8 @@ SPLASH_ICON ICON "splash.ico"
 #define LS(name) LOCALE_##name RCDATA STR(locales/out/##name##.loc)
 LOCALETYPES
 
+CHM_HELP RCDATA "help/help.chm"
+
 #include <wx/msw/wx.rc>
 
 #include "gui/versioninfo.h"

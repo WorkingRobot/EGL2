@@ -11,6 +11,7 @@
 #include "../storage/EGSProvider.h"
 #include "cSplash.h"
 #include "Localization.h"
+#include "wxHelpButton.h"
 
 #include <oodle2.h>
 #include <ShlObj_core.h>
@@ -208,6 +209,13 @@ bool cApp::InitThread() {
 		Oodle_LogHeader();
 	}
 	LOG_DEBUG("Loaded Oodle");
+
+	LOG_INFO("Loading help");
+	if (!wxHelpButton::LoadHelp(DataFolder)) {
+		wxMessageBox(LSTR(APP_ERROR_CHM), LTITLE("Error"), wxICON_ERROR | wxOK | wxCENTRE);
+		return false;
+	}
+	LOG_DEBUG("Loaded help");
 
 	LOG_INFO("Setting up symlink workaround");
 	if (!IsDeveloperModeEnabled()) {

@@ -1,0 +1,15 @@
+body {
+    background-color: #F8F8F8;
+    font-family: Arial, Helvetica, sans-serif;
+    scrollbar-highlight-color: #F8F8F8;
+    scrollbar-arrow-color: #F8F8F8;
+    scrollbar-face-color: lightgray;
+    -ms-overflow-style: -ms-autohiding-scrollbar;
+}
+h3, p {
+    margin: 5px 0;
+}
+img {
+    width: 1.25em;
+    float: right;
+}
